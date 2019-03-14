@@ -17,3 +17,7 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 - Implement Earth Mover's Distance metric
 - Implement generator net
 - Implement critic net
+- Implement Experiment(s). Options:
+    - Bidirectional latent encoder
+    - Coordinate convolutions
+    - Anything else cool!
