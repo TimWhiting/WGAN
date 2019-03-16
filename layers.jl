@@ -36,4 +36,26 @@ h = myLayer(x) # performs Wx + b
 """
 (l::Connected)(x::AbstractArray) = l.σ.(l.W * x .+ l.b)
 
+"""A convolutional NN layer"""
+struct Convolution{F,A,V}
+    W::A
+    b::V
+    σ::F
+end
+
+function Convolution(filter::NTuple{N,Int}, ch::Pair{Int,Int}, σ = identity; init = randn)
+    # Weights will have dimensions (filterDim1 x filterDim2 x numInputChannels x numOutputChannels)
+    # i.e. there is a filter of weights for each input channel of each feature map.
+    # Each feature map only has one bias weight.
+    W = param(init(filter..., ch...))
+    b = param(zeros(ch[2]))
+    return Convolution(W, b, σ) 
+end
+
+Flux.@treelike Convolution
+
+function (c::Convolution)(x::AbstractArray)
+    # TODO
+end
+
 end # module layers
