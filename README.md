@@ -13,8 +13,8 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 
 ## TODOs
 
-- Implement convolution layer
-- Implement convolution transpose layer
+- (Evan) Implement convolution layer
+- (Evan) Implement convolution transpose layer
 - Implement gradient clipping
 - Implement Earth Mover's Distance metric
 - Implement generator net
