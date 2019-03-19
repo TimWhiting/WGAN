@@ -33,6 +33,8 @@ myLayer = Connected(5,10,σ)
 x = [1,2,3,4,5]
 h = myLayer(x) # performs Wx + b
 ```
+
+Performs forward propagation on the input array `x`.
 """
 (l::Connected)(x::AbstractArray) = l.σ.(l.W * x .+ l.b)
 
@@ -43,19 +45,37 @@ struct Convolution{F,A,V}
     σ::F
 end
 
-function Convolution(filter::NTuple{N,Int}, ch::Pair{Int,Int}, σ = identity; init = randn)
-    # Weights will have dimensions (filterDim1 x filterDim2 x numInputChannels x numOutputChannels)
+function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = randn)
+    # Weights will have dimensions (filter x filter x inCh x outCh)
     # i.e. there is a filter of weights for each input channel of each feature map.
     # Each feature map only has one bias weight.
-    W = param(init(filter..., ch...))
-    b = param(zeros(ch[2]))
+    W = param(init(filter, filter, inCh, outCh))
+    b = param(zeros(outCh))
     return Convolution(W, b, σ) 
 end
 
 Flux.@treelike Convolution
 
 function (c::Convolution)(x::AbstractArray)
-    # TODO
+    # Initialize the pre-activated feature map values
+    filterDim, _, inCh, outCh = size(c.W)
+    xDimRows, xDimCols = size(x)[1:2]
+    net = zeros(xDimRows - filterDim - 1, xDimCols - filterDim - 1, outCh)
+    # Compute the nets
+    convRows, convCols = size(net)[1:2]
+    for featMap in 1:outCh
+        for channel in 1:inCh
+            # convolve over this input matrix
+            inᵢ, inⱼ = 1, 1
+            for netⱼ in 1:convCols
+                for netᵢ in 1:convRows
+                    # TODO: Start multiplying things.
+                end
+            end
+        end
+    end
+    # add bias and activate
+    return c.σ.(net .+ c.b)
 end
 
 end # module layers
