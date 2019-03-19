@@ -2,6 +2,11 @@ module layers
 
 using Flux
 
+# Flux needs these methods to convert TrackedReals to Floats
+# for faster matrix multiplies
+Base.Float64(x::Flux.Tracker.TrackedReal{T}) where T <: Number = Float64(x.data)
+Base.Float32(x::Flux.Tracker.TrackedReal{T}) where T <: Number = Float32(x.data)
+
 """A fully connected NN layer."""
 struct Connected{F,S,T}
     W::S # These types need to remain fairly dynamic because
@@ -56,26 +61,33 @@ end
 
 Flux.@treelike Convolution
 
+"""
+Performs forward convolution on the input array `x`. `x` should be
+in the HWC (height-width-channels) format.
+"""
 function (c::Convolution)(x::AbstractArray)
     # Initialize the pre-activated feature map values
     filterDim, _, inCh, outCh = size(c.W)
     xDimRows, xDimCols = size(x)[1:2]
-    net = zeros(xDimRows - filterDim - 1, xDimCols - filterDim - 1, outCh)
+    net = Array{Any}(undef, xDimRows - filterDim + 1, xDimCols - filterDim + 1, outCh)
     # Compute the nets
-    convRows, convCols = size(net)[1:2]
+    featMapRows, featMapCols = size(net)[1:2]
     for featMap in 1:outCh
-        for channel in 1:inCh
-            # convolve over this input matrix
-            inᵢ, inⱼ = 1, 1
-            for netⱼ in 1:convCols
-                for netᵢ in 1:convRows
-                    # TODO: Start multiplying things.
-                end
-            end
+        # convolve over the input matrix to get
+        # this feature map
+        for netⱼ in 1:featMapCols, netᵢ in 1:featMapRows
+            xRows = netᵢ:netᵢ+filterDim-1
+            xCols = netⱼ:netⱼ+filterDim-1
+            chProducts = sum(sum(x[xRows,xCols, channel] .* c.W[:, :, channel, featMap]) for channel in 1:inCh)
+            net[netᵢ, netⱼ, featMap] = chProducts
         end
+        # Add the bias
+        net[:,:,featMap] .+ c.b[featMap]
     end
-    # add bias and activate
-    return c.σ.(net .+ c.b)
+    # Activate
+    return c.σ.(net)
 end
+
+export Connected, Convolution
 
 end # module layers
