@@ -1,4 +1,5 @@
 # WGAN
+
 Authors: Tim Whiting & Evan Peterson
 
 An implementation of a Wasserstein Generative Adversarial Network (WGAN) in Julia for Advanced Machine Learning class.
@@ -16,10 +17,10 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 - (Evan) Implement convolution layer
 - (Evan) Implement convolution transpose layer
 - Implement gradient clipping
-- Implement Earth Mover's Distance metric
+- (Tim) Implement Earth Mover's Distance metric
 - Implement generator net
-- Implement critic net
+- (Tim) Implement critic net
 - Implement Experiment(s), Options:
-    - Bidirectional latent encoder
-    - Coordinate convolutions
-    - Anything else cool!
+  - Bidirectional latent encoder
+  - Coordinate convolutions
+  - Anything else cool!
