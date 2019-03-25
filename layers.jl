@@ -1,6 +1,7 @@
 module layers
 
 using Flux
+using Flux: glorot_uniform
 
 # Flux needs these methods to convert TrackedReals to Floats
 # for faster matrix multiplies
@@ -17,7 +18,7 @@ end
 # We call param() on each thing we're training so Flux
 # keeps track of computations that take place on those things,
 # so it can perform backprop on them.
-function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = randn, initb::Function = randn)
+function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = glorot_uniform, initb::Function = randn)
     W = param(initW(outDim, inDim))
     b = param(initb(outDim))
     return Connected(W, b, σ)
@@ -53,7 +54,7 @@ struct Convolution{F,A,V}
     outCh::Int
 end
 
-function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = randn)
+function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = glorot_uniform)
     # Weights will have dimensions (filter x filter x inCh x outCh)
     # i.e. there is a filter of weights for each input channel of each feature map.
     # Each feature map only has one bias weight.
@@ -66,25 +67,25 @@ Flux.@treelike Convolution
 
 """
 Performs forward convolution on the input array `x`. `x` should be
-in the HWC (height-width-channels) format.
+in the HWCN (height-width-channels-batchsize) format.
 """
 function (c::Convolution)(x::AbstractArray)
     # Initialize the pre-activated feature map values
-    xDimRows, xDimCols = size(x)[1:2]
-    net = Array{Any}(undef, xDimRows - c.filterDim + 1, xDimCols - c.filterDim + 1, c.outCh)
+    xDimRows, xDimCols, _, batchSize = size(x)
+    net = Array{Any}(undef, xDimRows - c.filterDim + 1, xDimCols - c.filterDim + 1, c.outCh, batchSize)
     # Compute the nets
     numRowSteps, numColSteps = size(net)[1:2]
-    for featMap in 1:c.outCh
+    for batchᵢ in 1:batchSize, featMap in 1:c.outCh
         # convolve over the input matrix to get
         # this feature map
         for netⱼ in 1:numColSteps, netᵢ in 1:numRowSteps
             xRows = netᵢ:(netᵢ + c.filterDim - 1)
             xCols = netⱼ:(netⱼ + c.filterDim - 1)
-            chProducts = sum(sum(x[xRows,xCols, channel] .* c.W[:, :, channel, featMap]) for channel in 1:c.inCh)
-            net[netᵢ, netⱼ, featMap] = chProducts
+            chProducts = sum(sum(x[xRows,xCols, channel, batchᵢ] .* c.W[:, :, channel, featMap]) for channel in 1:c.inCh)
+            net[netᵢ, netⱼ, featMap, batchᵢ] = chProducts
         end
         # Add the bias
-        net[:,:,featMap] .+ c.b[featMap]
+        net[:,:,featMap,batchᵢ] .+ c.b[featMap]
     end
     # Activate
     return c.σ.(net)
@@ -102,7 +103,7 @@ struct ConvolutionTranspose{F,A,V}
     xHeight::Int
 end
 
-function ConvolutionTranspose(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = randn)
+function ConvolutionTranspose(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
     # Final convolution transpose matrix (CTM) will have dimensions
     # (filter^2 x elementsInX x inCh x outCh).
     # Each feature map only has one bias weight.
@@ -135,7 +136,7 @@ Flux.@treelike ConvolutionTranspose
 
 """
 Performs forward convolution transpose on the input array
-`x`. `x` should be in the HWC (height-width-channels) format.
+`x`. `x` should be in the HWCN (height-width-channels-batchsize) format.
 """
 function (c::ConvolutionTranspose)(x::AbstractArray)
     if size(x)[1] != c.xHeight - c.filterDim + 1
@@ -144,17 +145,18 @@ function (c::ConvolutionTranspose)(x::AbstractArray)
         throw(ArgumentError("Incoming array `x` must have $(c.xWidth - c.filterDim + 1) columns, not $(size(x)[2])"))
     end
 
+    batchSize = size(x)[4]
     # flatten each channel into a vector
-    flatX = reshape(permutedims(x, [2,1,3]), size(x)[1] * size(x)[2], size(x)[3])
+    flatX = reshape(x, size(x)[1] * size(x)[2], size(x)[3], batchSize)
     # Initialize the pre-activated feature map values
-    net = Array{Any}(undef, c.xHeight, c.xWidth, c.outCh)
+    net = Array{Any}(undef, c.xHeight, c.xWidth, c.outCh, batchSize)
     # Compute the nets
     numRowSteps, numColSteps = size(net)[1:2]
-    for featMap in 1:c.outCh
+    for batchᵢ in 1:batchSize, featMap in 1:c.outCh
         # Calculate and sum the nets across all input channels
-        chNets = sum(c.CTM[:, :, ch, featMap] * flatX[:, ch] for ch in 1:c.inCh)
+        chNets = sum(c.CTM[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
         # Add the bias
-        net[:, :, featMap] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
+        net[:, :, featMap, batchᵢ] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
     end
     # Activate
     return c.σ.(net)
