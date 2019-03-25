@@ -7,4 +7,6 @@ and upper and lower bound of `(μ - bound, μ + bound)`.
 """
 randuFn(μ::Number, bound::Number) = (dims...) -> (rand(dims...) .* 2 .- 1) .* bound .+ μ
 
+export randuFn
+
 end # module utils

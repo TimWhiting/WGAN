@@ -14,8 +14,6 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 
 ## TODOs
 
-- (Evan) Implement convolution layer
-- (Evan) Implement convolution transpose layer
 - Implement gradient clipping
 - (Tim) Implement Earth Mover's Distance metric
 - Implement generator net
