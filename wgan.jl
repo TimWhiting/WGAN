@@ -144,12 +144,57 @@ function EarthMoversDistance(x, y)
 end
 
 function trainWGAN(wgan::WGAN, trainingSet::DataSet)
-    lossGenerator(x, y) = EarthMoversDistance(wgan.generator.model(x), y);
+    lossGenerator(x, y) = EarthMoversDistance(wgan.generator.model(x), y)
     # TODO: What is the loss of critic
-    lossCritic(x, y) = EarthMoversDistance(wgan.critic.model(x), y);
+    lossCritic(x, y) = EarthMoversDistance(wgan.critic.model(x), y)
+    # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
+    accuracy(x, y) = EarthMoversDistance(wgan.generator.model(x), y)
     paramsCritic = Flux.params(wgan.critic.model)
     paramsGenerator = Flux.params(wgan.generator.model)
-    train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainingSet, RMSProp, clip; cb = wgan.callback)
+    opt = RMSProp()
+    train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainingSet, opt, clip; cb = wgan.callback)
+
+    @info("Beginning training loop...")
+    best_acc = 0.0
+    last_improvement = 0
+    for epoch_idx in 1:100
+        global best_acc, last_improvement
+        # Train for a single epoch
+        train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainingSet, opt, clip; cb = wgan.callback)
+
+        # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
+        # Calculate accuracy:
+        acc = accuracy(test_set...)
+        @info(@sprintf("[%d]: Test accuracy: %.4f", epoch_idx, acc))
+    
+        # If our accuracy is good enough, quit out.
+        if acc >= 0.999
+            @info(" -> Early-exiting: We reached our target accuracy of 99.9%")
+            break
+        end
+
+        # If this is the best accuracy we've seen so far, save the model out
+        if acc >= best_acc
+            @info(" -> New best accuracy! Saving model out to mnist_conv.bson")
+            BSON.@save "mnist_conv_critic.bson" wgan.critic.model epoch_idx acc
+            BSON.@save "mnist_conv_generator.bson" wgan.critic.model epoch_idx acc
+            best_acc = acc
+            last_improvement = epoch_idx
+        end
+
+        # If we haven't seen improvement in 5 epochs, drop our learning rate:
+        if epoch_idx - last_improvement >= 5 && opt.eta > 1e-6
+            opt.eta /= 10.0
+            @warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
+            # After dropping learning rate, give it a few epochs to improve
+            last_improvement = epoch_idx
+        end
+
+        if epoch_idx - last_improvement >= 10
+            @warn(" -> We're calling this converged.")
+            break
+        end
+    end
 end
 
 
