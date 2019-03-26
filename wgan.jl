@@ -7,6 +7,7 @@ using Base.Iterators: repeated, partition
 using Printf, BSON
 using learn
 using stats
+using Statistics
 
 import Flux.Tracker: Params, gradient, data, update!
 
@@ -44,12 +45,12 @@ struct MLPCritic <: Critic
 end
 
 function MLPCritic()
-    model = Chain(Dense(28^2, 28), Dense(28, 14), Dense(14, 10), softmax)
+    model = Chain(Dense(28^2, 128, relu), Dense(128, 32, relu), Dense(32, 1))
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(Dense(10, 14), Dense(14, 28), Dense(28, 28^2))
+    model = Chain(Dense(100, 128, relu), Dense(128, 28^2, σ))
     return MLPGenerator(model)
 end
 
@@ -63,7 +64,10 @@ struct WGAN
 end
 
 
-
+# NOTES:
+# - Make sure to normalize the images, as the generator outputs
+# values in (0,1).
+# - Try an initial LR of 5e-5. That's what they use in the WGAN paper.
 """
     train!(loss, paramsGenerator, paramsCritic, data, optimizer; cb)
 
@@ -125,31 +129,30 @@ function clip(params::Params)
     end
 end
 
+"""
+Calculates the generator's loss, using a sample of Z
+"""
+generatorLoss(c::Critic, g::Generator, Z) = mean(c(g(Z)))
 
 """
-  earthMoversDistance(x, y)
-Calculates the earth movers distance loss function
-   `x` is the given data sample
-   `y` is the expected distribution
+Calculates the critic's loss, using a sample of `X` and sample
+of `Z`, each of equal length. We take the negative of the difference
+to turn the output into a loss that we want to minimize.
+Minimizing this loss function will maximize the critic's ability
+to differentiate between the distribution of the generated data and
+the real data.
 """
-function earthMoversDistance(x, y)
-# TODO: create earthMoversDistance loss function
-end
+criticLoss(c::Critic, g::Generator, X, Z) = -(mean(c(X)) - mean(c(g(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetAcc = 0.999, modelName = "model",
     patience = 10, minLr = 1e-6, lrDropThreshold = 5
 )
     modelStats = LearningStats()
-    lossGenerator(x, y) = earthMoversDistance(wgan.generator.model(x), y)
-    # TODO: What is the loss of critic
-    lossCritic(x, y) = earthMoversDistance(wgan.critic.model(x), y)
     # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
-    accuracy(x, y) = earthMoversDistance(wgan.generator.model(x), y)
     paramsCritic = Flux.params(wgan.critic.model)
     paramsGenerator = Flux.params(wgan.generator.model)
     opt = RMSProp()
-    train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
 
     @info("Beginning training loop...")
     best_acc = 0.0
@@ -157,7 +160,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     for epoch_idx in 1:epochs
         global best_acc, last_improvement
         # Train for a single epoch
-        train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
+        train!(generatorLoss, criticLoss, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
 
         # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
         # Calculate accuracy:
