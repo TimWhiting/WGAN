@@ -5,6 +5,8 @@ using Flux.Data.MNIST, Statistics
 using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp
 using Base.Iterators: repeated, partition
 using Printf, BSON
+using learn
+using stats
 
 import Flux.Tracker: Params, gradient, data, update!
 
@@ -13,23 +15,14 @@ import Flux.Tracker: Params, gradient, data, update!
 @info("Loading data set")
 train_labels = MNIST.labels()
 train_imgs = MNIST.images()
-# Bundle images together with labels and group into minibatchess
-function make_minibatch(X, Y, idxs)
-    X_batch = Array{Float32}(undef, size(X[1])..., 1, length(idxs))
-    for i in 1:length(idxs)
-        X_batch[:, :, :, i] = Float32.(X[idxs[i]])
-    end
-    Y_batch = onehotbatch(Y[idxs], 0:9)
-    return (X_batch, Y_batch)
-end
+
 batch_size = 128
-mb_idxs = partition(1:length(train_imgs), batch_size)
-train_set = [make_minibatch(train_imgs, train_labels, i) for i in mb_idxs]
+train_set = makeMinibatches(train_imgs, train_labels, batch_size)
 
 # Prepare test set as one giant minibatch:
 test_imgs = MNIST.images(:test)
 test_labels = MNIST.labels(:test)
-test_set = make_minibatch(test_imgs, test_labels, 1:length(test_imgs))
+test_set = makeMinibatch(test_imgs, test_labels, 1:length(test_imgs))
 
 abstract type Generator end
 abstract type Critic end
@@ -51,12 +44,12 @@ struct MLPCritic <: Critic
 end
 
 function MLPCritic()
-    model = Chain(Dense(28, 28), Dense(28, 14), Dense(14, 10), softmax)
+    model = Chain(Dense(28^2, 28), Dense(28, 14), Dense(14, 10), softmax)
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(Dense(10, 14), Dense(14, 28), Dense(28, 28))
+    model = Chain(Dense(10, 14), Dense(14, 28), Dense(28, 28^2))
     return MLPGenerator(model)
 end
 
@@ -139,62 +132,69 @@ Calculates the earth movers distance loss function
    `x` is the given data sample
    `y` is the expected distribution
 """
-function EarthMoversDistance(x, y)
+function earthMoversDistance(x, y)
 # TODO: create earthMoversDistance loss function
 end
 
-function trainWGAN(wgan::WGAN, trainingSet::DataSet)
-    lossGenerator(x, y) = EarthMoversDistance(wgan.generator.model(x), y)
+function trainWGAN(wgan::WGAN, trainSet, valSet;
+    epochs = 100, targetAcc = 0.999, modelName = "model",
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5
+)
+    modelStats = LearningStats()
+    lossGenerator(x, y) = earthMoversDistance(wgan.generator.model(x), y)
     # TODO: What is the loss of critic
-    lossCritic(x, y) = EarthMoversDistance(wgan.critic.model(x), y)
+    lossCritic(x, y) = earthMoversDistance(wgan.critic.model(x), y)
     # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
-    accuracy(x, y) = EarthMoversDistance(wgan.generator.model(x), y)
+    accuracy(x, y) = earthMoversDistance(wgan.generator.model(x), y)
     paramsCritic = Flux.params(wgan.critic.model)
     paramsGenerator = Flux.params(wgan.generator.model)
     opt = RMSProp()
-    train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainingSet, opt, clip; cb = wgan.callback)
+    train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
 
     @info("Beginning training loop...")
     best_acc = 0.0
     last_improvement = 0
-    for epoch_idx in 1:100
+    for epoch_idx in 1:epochs
         global best_acc, last_improvement
         # Train for a single epoch
-        train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainingSet, opt, clip; cb = wgan.callback)
+        train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
 
         # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
         # Calculate accuracy:
-        acc = accuracy(test_set...)
+        acc = accuracy(valSet...)
+        push!(modelStats.valAcc, acc)
         @info(@sprintf("[%d]: Test accuracy: %.4f", epoch_idx, acc))
     
         # If our accuracy is good enough, quit out.
-        if acc >= 0.999
-            @info(" -> Early-exiting: We reached our target accuracy of 99.9%")
+        if acc >= targetAcc
+            @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc*100)%")
             break
         end
 
         # If this is the best accuracy we've seen so far, save the model out
         if acc >= best_acc
-            @info(" -> New best accuracy! Saving model out to mnist_conv.bson")
-            BSON.@save "mnist_conv_critic.bson" wgan.critic.model epoch_idx acc
-            BSON.@save "mnist_conv_generator.bson" wgan.critic.model epoch_idx acc
+            @info(" -> New best accuracy! Saving models out to $(modelName)_<type>.bson")
+            BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx acc
+            BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx acc
             best_acc = acc
+            modelStats.bestValAcc = best_acc
             last_improvement = epoch_idx
         end
 
-        # If we haven't seen improvement in 5 epochs, drop our learning rate:
-        if epoch_idx - last_improvement >= 5 && opt.eta > 1e-6
+        # If we haven't seen improvement in lrDropThreshold epochs, drop our learning rate:
+        if epoch_idx - last_improvement >= lrDropThreshold && opt.eta > minLr
             opt.eta /= 10.0
             @warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
             # After dropping learning rate, give it a few epochs to improve
             last_improvement = epoch_idx
         end
 
-        if epoch_idx - last_improvement >= 10
+        if epoch_idx - last_improvement >= patience
             @warn(" -> We're calling this converged.")
             break
         end
     end
+    return modelStats
 end
 
 
