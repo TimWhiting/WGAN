@@ -93,6 +93,6 @@ function trainOne(loss, model, trainSet, valSet, opt = ADAM(0.001);
     return modelStats
 end
 
-export LearningStats, makeMinibatch, makeMinibatches, trainOne, oneHotClassificationAccuracy
+export makeMinibatch, makeMinibatches, trainOne, oneHotClassificationAccuracy
 
 end # module learn
