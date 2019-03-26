@@ -22,3 +22,4 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
   - Bidirectional latent encoder
   - Coordinate convolutions
   - Anything else cool!
+  - Validate on a hold-out set from the same distribution as the train set
