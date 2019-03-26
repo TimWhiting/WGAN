@@ -124,11 +124,10 @@ end
 
 function clip(params::Params)
     for param in params;
-        if param > .1
+        if param > .1;
             param = .1
-        else if param < -.1
-                param = -.1
-            end
+        elseif param < -.1;
+            param = -.1
         end
     end
 end
@@ -138,7 +137,7 @@ end
   earthMoversDistance(x, y)
 Calculates the earth movers distance loss function
    `x` is the given data sample
-   `y` is the expected distribution   
+   `y` is the expected distribution
 """
 function EarthMoversDistance(x, y)
 # TODO: create earthMoversDistance loss function
