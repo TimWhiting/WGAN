@@ -132,7 +132,7 @@ end
 """
 Calculates the generator's loss, using a sample of Z
 """
-generatorLoss(c::Critic, g::Generator, Z) = mean(c(g(Z)))
+generatorLoss(c::Critic, g::Generator, Z) = mean(c.model(g.model(Z)))
 
 """
 Calculates the critic's loss, using a sample of `X` and sample
@@ -142,7 +142,7 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X, Z) = -(mean(c(X)) - mean(c(g(Z))))
+criticLoss(c::Critic, g::Generator, X, Z) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetAcc = 0.999, modelName = "model",
