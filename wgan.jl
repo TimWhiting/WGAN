@@ -146,42 +146,38 @@ the real data.
 criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,2}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
-    epochs = 100, targetAcc = 0.999, modelName = "model",
+    epochs = 100, targetLoss = 0.001, modelName = "model",
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
-    # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
-    
     opt = RMSProp()
 
     @info("Beginning training loop...")
-    best_acc = 0.0
+    best_loss = 0.0
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
 
-        # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
-        # Calculate accuracy:
-        #acc = accuracy(valSet...)
-        acc = 100 - criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
-        push!(modelStats.valAcc, acc)
-        @info(@sprintf("[%d]: Test accuracy: %.4f", epoch_idx, acc))
+        # Calculate loss:
+        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+        push!(modelStats.valAcc, loss)
+        @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
     
-        # If our accuracy is good enough, quit out.
-        if acc >= targetAcc
-            @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc * 100)%")
+        # If our loss is good enough, quit out.
+        if targetLoss >= loss
+            @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
             break
         end
 
-        # If this is the best accuracy we've seen so far, save the model out
-        if acc >= best_acc
-            @info(" -> New best accuracy! Saving models out to $(modelName)_<type>.bson")
+        # If this is the best loss we've seen so far, save the model out
+        if best_loss >= loss
+            @info(" -> New best loss! Saving models out to $(modelName)_<type>.bson")
             #TODO: FIgure out saving models
-            #BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx acc
-            #BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx acc
-            best_acc = acc
-            modelStats.bestValAcc = best_acc
+            #BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx loss
+            #BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx loss
+            best_loss = loss
+            modelStats.bestValAcc = best_loss
             last_improvement = epoch_idx
         end
 
