@@ -2,28 +2,15 @@ module wgan
 using Juno
 
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams
 using Base.Iterators: repeated, partition
 using Printf, BSON
 using learn
 using stats
 using Statistics
-
+using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
 
-
-# Load labels and images from Flux.Data.MNIST
-@info("Loading data set")
-train_labels = MNIST.labels()
-train_imgs = MNIST.images()
-
-batch_size = 128
-train_set = makeMinibatches(train_imgs, train_labels, batch_size)
-
-# Prepare test set as one giant minibatch:
-test_imgs = MNIST.images(:test)
-test_labels = MNIST.labels(:test)
-test_set = makeMinibatch(test_imgs, test_labels, 1:length(test_imgs))
 
 abstract type Generator end
 abstract type Critic end
@@ -55,19 +42,34 @@ function MLPGenerator()
 end
 
 struct WGAN
-    α::Float64 # Learning Rate
-    c::Float64 # Clipping Parameter
-    m::UInt64 # Batch Size
+    α::Float32 # Learning Rate
+    c::Float32 # Clipping Parameter
+    m::Int64 # Batch Size
+    n::Int64 # Input to generator size
     n_critic::UInt64 # Number of iterations of critic per generator
     critic::Critic # Critic parameters
     generator::Generator # Generator parameters 
+    callback::Function
 end
 
+function WGAN()
+    # TODO: Add versions with DCGAN, remember batch normalization
+    # TODO: Fix these parameters
+    return WGAN(Float32(.001), Float32(.4), 10, 100, 10, MLPCritic(), MLPGenerator(), ()->())
+end
 
+function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
+    return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
+end
 # NOTES:
 # - Make sure to normalize the images, as the generator outputs
 # values in (0,1).
 # - Try an initial LR of 5e-5. That's what they use in the WGAN paper.
+
+struct StopException <: Exception end
+call(f, xs...) = f(xs...)
+runall(f) = f
+runall(fs::AbstractVector) = ()->foreach(call, fs)
 """
     train!(loss, paramsGenerator, paramsCritic, data, optimizer; cb)
 
@@ -87,25 +89,24 @@ The callback can call `Flux.stop()` to interrupt the training loop.
 
 Multiple optimisers and callbacks can be passed to `opt` and `cb` as arrays.
 """
-function train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, data, optimizer, postProcessCritic; cb = ()->())
-    ps = Params(ps)
+function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProcessCritic; cb = ()->())
+    paramsCritic = Params(params(wgan.critic.model))
+    paramsGenerator = Params(params(wgan.generator.model))
     cb = runall(cb)
+    
     @progress for d in data
         try
-            for t = 0:model.n_critic;
+            for t = 0:wgan.n_critic;
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
-                gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(d...)
-                end
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
-                priorgs = gradient(paramsGenerator) do # Make this a batch
-                    lossGenerator(d...)
+                gs = gradient(paramsCritic) do # Make this a batch
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
                 end
                 update!(optimizer, paramsCritic, gs)
-                postProcessCritic(paramsCritic) # Do clipping
+                postProcessCritic(paramsCritic, wgan.c)
             end
             priorgs = gradient(paramsGenerator) do # Make this a batch
-                lossGenerator(d...)
+                lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
             end
             update!(optimizer, paramsGenerator, priorgs)
         catch ex
@@ -119,12 +120,12 @@ function train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, data, 
 end
 
 
-function clip(params::Params)
-    for param in params;
-        if param > .1;
-            param = .1
-        elseif param < -.1;
-            param = -.1
+function clip(params::Params, c::Float32)
+    mapparams(params) do param
+        if param > c
+            param = c
+        elseif param < -c
+            param = -c
         end
     end
 end
@@ -132,7 +133,7 @@ end
 """
 Calculates the generator's loss, using a sample of Z
 """
-generatorLoss(c::Critic, g::Generator, Z) = mean(c.model(g.model(Z)))
+generatorLoss(c::Critic, g::Generator, Z::AbstractArray{Float32,2}) = mean(c.model(g.model(Z)))
 
 """
 Calculates the critic's loss, using a sample of `X` and sample
@@ -142,43 +143,43 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X, Z) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
+criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,2}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetAcc = 0.999, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5
-)
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5)
+    @info("Beginning training function...")
     modelStats = LearningStats()
     # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
-    paramsCritic = Flux.params(wgan.critic.model)
-    paramsGenerator = Flux.params(wgan.generator.model)
+    
     opt = RMSProp()
 
     @info("Beginning training loop...")
     best_acc = 0.0
     last_improvement = 0
     for epoch_idx in 1:epochs
-        global best_acc, last_improvement
         # Train for a single epoch
-        train!(generatorLoss, criticLoss, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
+        train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
 
         # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
         # Calculate accuracy:
-        acc = accuracy(valSet...)
+        #acc = accuracy(valSet...)
+        acc = 100 - criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
         push!(modelStats.valAcc, acc)
         @info(@sprintf("[%d]: Test accuracy: %.4f", epoch_idx, acc))
     
         # If our accuracy is good enough, quit out.
         if acc >= targetAcc
-            @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc*100)%")
+            @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc * 100)%")
             break
         end
 
         # If this is the best accuracy we've seen so far, save the model out
         if acc >= best_acc
             @info(" -> New best accuracy! Saving models out to $(modelName)_<type>.bson")
-            BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx acc
-            BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx acc
+            #TODO: FIgure out saving models
+            #BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx acc
+            #BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx acc
             best_acc = acc
             modelStats.bestValAcc = best_acc
             last_improvement = epoch_idx

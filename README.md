@@ -14,9 +14,8 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 
 ## TODOs
 
-- Implement gradient clipping
 - (Tim) Implement Earth Mover's Distance metric
-- Implement generator net
+- (Tim) Implement generator net
 - (Tim) Implement critic net
 - Implement Experiment(s), Options:
   - Bidirectional latent encoder
