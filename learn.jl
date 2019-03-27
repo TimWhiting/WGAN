@@ -52,12 +52,16 @@ function trainOne(loss, model, trainSet, valSet, opt = ADAM(0.001);
         acc = oneHotClassificationAccuracy(model, valSet...)
         push!(modelStats.valAcc, acc)
         @info(@sprintf("[%d]: Validation accuracy: %.4f", epoch_idx, acc))
-        
-        # Calculate loss:
-        l = loss(valSet...)
-        push!(modelStats.valLoss, l)
-        if l < best_loss
-            best_loss = l
+
+        # Calculate training loss:
+        trainLoss = loss(trainSet[1]...)
+        push!(modelStats.trainLoss, trainLoss)        
+
+        # Calculate validation loss:
+        valLoss = loss(valSet...)
+        push!(modelStats.valLoss, valLoss)
+        if valLoss < best_loss
+            best_loss = valLoss
             modelStats.bestValLoss = best_loss
         end
         

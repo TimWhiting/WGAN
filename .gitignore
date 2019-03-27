@@ -1,2 +1,5 @@
 scratch.jl
 *.bson
+*.png
+*.jpeg
+*.jpg
