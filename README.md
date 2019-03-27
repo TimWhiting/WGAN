@@ -7,6 +7,7 @@ An implementation of a Wasserstein Generative Adversarial Network (WGAN) in Juli
 ## Dependencies
 
 Needed dependencies for running the project locally: `Flux`. If running on GPU with your local machine, also include: `CuArrays`.
+Also needs: `Images`, and `ImageMagick` and `NNlib`
 
 ## Leveraging TPU
 
