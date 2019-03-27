@@ -4,11 +4,13 @@ using Juno
 using Flux.Data.MNIST, Statistics
 using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams
 using Base.Iterators: repeated, partition
-using Printf, BSON
+using Printf
+using BSON: @save
 using learn
 using stats
 using Statistics
 using Images
+using Dates: now
 using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
 
@@ -97,21 +99,21 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
     t = 0
     @progress for d in data
         try
-            if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update
+            if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update               
                 gs = gradient(paramsCritic) do # Make this a batch
                     lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
                 end
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
-                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
                 update!(optimizer, paramsGenerator, priorgs)
             else
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
@@ -161,18 +163,18 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     opt = RMSProp()
 
     @info("Beginning training loop...")
-    best_loss = 0.0
+    best_loss = 10000000000000000000000000000.0
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
 
         # Calculate loss:
-        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
      
-        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(1.0))), 28, 28)))
+        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(0.5))), 28, 28)))
         # If our loss is good enough, quit out.
         if targetLoss >= loss
             @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
@@ -181,10 +183,12 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
 
         # If this is the best loss we've seen so far, save the model out
         if best_loss >= loss
-            @info(" -> New best loss! Saving models out to $(modelName)_<type>.bson")
-            #TODO: FIgure out saving models
-            #BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx loss
-            #BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx loss
+            @info(" -> New best loss! Saving models out to $(modelName)_critic/generator-timestamp.bson")
+            #TODO: Figure out saving models -- not working right now
+            #critic = wgan.critic.model
+            #generator = wgan.generator.model
+            #@save "$(modelName)_critic-$(now()).bson" critic epoch_idx loss
+            #@save "$(modelName)_generator-$(now()).bson" generator epoch_idx loss
             best_loss = loss
             modelStats.bestValAcc = best_loss
             last_improvement = epoch_idx
