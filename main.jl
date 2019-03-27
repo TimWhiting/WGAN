@@ -32,7 +32,7 @@ function trainMNIST()
     @info("Loading data set")
     train_imgs = MNIST.images()
 
-    batch_size = 128
+    batch_size = 64
     mb_idxs = partition(1:length(train_imgs), batch_size)
     train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
 
@@ -53,7 +53,6 @@ function trainMNIST()
 
     # Make sure our model is nicely precompiled before starting our training loop
     #wgan.critic.model(train_set[1][1])
-
     trainWGAN(wgan, train_set, test_set)
 
 end

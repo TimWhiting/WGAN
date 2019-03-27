@@ -8,6 +8,7 @@ using Printf, BSON
 using learn
 using stats
 using Statistics
+using Images
 using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
 
@@ -55,7 +56,7 @@ end
 function WGAN()
     # TODO: Add versions with DCGAN, remember batch normalization
     # TODO: Fix these parameters
-    return WGAN(Float32(.001), Float32(.4), 10, 100, 10, MLPCritic(), MLPGenerator(), ()->())
+    return WGAN(Float32(.00005), Float32(.01), 64, 100, 5, MLPCritic(), MLPGenerator(), ()->())
 end
 
 function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
@@ -93,10 +94,20 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
     paramsCritic = Params(params(wgan.critic.model))
     paramsGenerator = Params(params(wgan.generator.model))
     cb = runall(cb)
-    
+    t = 0
     @progress for d in data
         try
-            for t = 0:wgan.n_critic;
+            if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update
+                gs = gradient(paramsCritic) do # Make this a batch
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+                end
+                update!(optimizer, paramsCritic, gs)
+                postProcessCritic(paramsCritic, wgan.c)
+                priorgs = gradient(paramsGenerator) do # Make this a batch
+                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+                end
+                update!(optimizer, paramsGenerator, priorgs)
+            else
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
                 gs = gradient(paramsCritic) do # Make this a batch
@@ -105,10 +116,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
             end
-            priorgs = gradient(paramsGenerator) do # Make this a batch
-                lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
-            end
-            update!(optimizer, paramsGenerator, priorgs)
+            t += 1
         catch ex
             if ex isa StopException
                 break
@@ -163,7 +171,8 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
-    
+     
+        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(1.0))), 28, 28)))
         # If our loss is good enough, quit out.
         if targetLoss >= loss
             @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
@@ -196,29 +205,5 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     end
     return modelStats
 end
-
-
-#function oldTrainWGAN(model::WGAN, trainingSet::DataSet)
-#  while !converged(model.θ)
-#      for t = 0:model.n_critic;
-#          # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
-#          x = sample(trainingSet)
-#          # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
-#          z = sampleGenerator(model.θ)
-#          # gw ← ∇w[1/m · sum(fw(x^(i))i=1:m - 1/m · sum(fw(gθ(z^(i))))i=1:m]
-#          gw = 0 # Implement this somehow
-#          # w ← w + α · RMSProp(w, gw)
-#          model.w += model.α*RMSProp(model.w, gw)
-#          # w ← clip(w, −c, c)
-#          model.w = clip(model.w, -model.c, model.c)
-#      end
-#      # Sample {z^(i)}i=1:m ∼ p(z) a batch of prior samples
-#      z = sampleGenerator(model.θ)
-#      # gθ ← −∇θ · 1/m · sum(fw(gθ(z^(i))))i=1:m
-#      gθ = 0 # Implement this somehow
-#      # θ ← θ − α · RMSProp(θ, gθ)
-#      #model.0 -= α * RMSProp(model.θ, gθ)
-#  end
-#end
 
 end
