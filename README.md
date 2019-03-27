@@ -7,6 +7,7 @@ An implementation of a Wasserstein Generative Adversarial Network (WGAN) in Juli
 ## Dependencies
 
 Needed dependencies for running the project locally: `Flux`. If running on GPU with your local machine, also include: `CuArrays`.
+Also needs: `Images`, and `ImageMagick` and `NNlib`
 
 ## Leveraging TPU
 
@@ -14,9 +15,8 @@ Here is a link to the JuliaTPU repository which tells how to run compile Julia t
 
 ## TODOs
 
-- Implement gradient clipping
 - (Tim) Implement Earth Mover's Distance metric
-- Implement generator net
+- (Tim) Implement generator net
 - (Tim) Implement critic net
 - Implement Experiment(s), Options:
   - Bidirectional latent encoder

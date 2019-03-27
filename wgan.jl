@@ -2,28 +2,18 @@ module wgan
 using Juno
 
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams
 using Base.Iterators: repeated, partition
-using Printf, BSON
+using Printf
+using BSON: @save
 using learn
 using stats
 using Statistics
-
+using Images
+using Dates: now
+using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
 
-
-# Load labels and images from Flux.Data.MNIST
-@info("Loading data set")
-train_labels = MNIST.labels()
-train_imgs = MNIST.images()
-
-batch_size = 128
-train_set = makeMinibatches(train_imgs, train_labels, batch_size)
-
-# Prepare test set as one giant minibatch:
-test_imgs = MNIST.images(:test)
-test_labels = MNIST.labels(:test)
-test_set = makeMinibatch(test_imgs, test_labels, 1:length(test_imgs))
 
 abstract type Generator end
 abstract type Critic end
@@ -55,19 +45,34 @@ function MLPGenerator()
 end
 
 struct WGAN
-    α::Float64 # Learning Rate
-    c::Float64 # Clipping Parameter
-    m::UInt64 # Batch Size
+    α::Float32 # Learning Rate
+    c::Float32 # Clipping Parameter
+    m::Int64 # Batch Size
+    n::Int64 # Input to generator size
     n_critic::UInt64 # Number of iterations of critic per generator
     critic::Critic # Critic parameters
     generator::Generator # Generator parameters 
+    callback::Function
 end
 
+function WGAN()
+    # TODO: Add versions with DCGAN, remember batch normalization
+    # TODO: Fix these parameters
+    return WGAN(Float32(.00005), Float32(.01), 64, 100, 5, MLPCritic(), MLPGenerator(), ()->())
+end
 
+function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
+    return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
+end
 # NOTES:
 # - Make sure to normalize the images, as the generator outputs
 # values in (0,1).
 # - Try an initial LR of 5e-5. That's what they use in the WGAN paper.
+
+struct StopException <: Exception end
+call(f, xs...) = f(xs...)
+runall(f) = f
+runall(fs::AbstractVector) = ()->foreach(call, fs)
 """
     train!(loss, paramsGenerator, paramsCritic, data, optimizer; cb)
 
@@ -87,27 +92,33 @@ The callback can call `Flux.stop()` to interrupt the training loop.
 
 Multiple optimisers and callbacks can be passed to `opt` and `cb` as arrays.
 """
-function train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, data, optimizer, postProcessCritic; cb = ()->())
-    ps = Params(ps)
+function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProcessCritic; cb = ()->())
+    paramsCritic = Params(params(wgan.critic.model))
+    paramsGenerator = Params(params(wgan.generator.model))
     cb = runall(cb)
+    t = 0
     @progress for d in data
         try
-            for t = 0:model.n_critic;
-                # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
+            if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update               
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(d...)
-                end
-                # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
-                priorgs = gradient(paramsGenerator) do # Make this a batch
-                    lossGenerator(d...)
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
                 end
                 update!(optimizer, paramsCritic, gs)
-                postProcessCritic(paramsCritic) # Do clipping
+                postProcessCritic(paramsCritic, wgan.c)
+                priorgs = gradient(paramsGenerator) do # Make this a batch
+                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                end
+                update!(optimizer, paramsGenerator, priorgs)
+            else
+                # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
+                # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
+                gs = gradient(paramsCritic) do # Make this a batch
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                end
+                update!(optimizer, paramsCritic, gs)
+                postProcessCritic(paramsCritic, wgan.c)
             end
-            priorgs = gradient(paramsGenerator) do # Make this a batch
-                lossGenerator(d...)
-            end
-            update!(optimizer, paramsGenerator, priorgs)
+            t += 1
         catch ex
             if ex isa StopException
                 break
@@ -119,12 +130,12 @@ function train!(lossGenerator, lossCritic, paramsGenerator, paramsCritic, data, 
 end
 
 
-function clip(params::Params)
-    for param in params;
-        if param > .1;
-            param = .1
-        elseif param < -.1;
-            param = -.1
+function clip(params::Params, c::Float32)
+    mapparams(params) do param
+        if param > c
+            param = c
+        elseif param < -c
+            param = -c
         end
     end
 end
@@ -132,7 +143,7 @@ end
 """
 Calculates the generator's loss, using a sample of Z
 """
-generatorLoss(c::Critic, g::Generator, Z) = mean(c.model(g.model(Z)))
+generatorLoss(c::Critic, g::Generator, Z::AbstractArray{Float32,2}) = mean(c.model(g.model(Z)))
 
 """
 Calculates the critic's loss, using a sample of `X` and sample
@@ -142,45 +153,44 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X, Z) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
+criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,2}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
-    epochs = 100, targetAcc = 0.999, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5
-)
+    epochs = 100, targetLoss = 0.001, modelName = "model",
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5)
+    @info("Beginning training function...")
     modelStats = LearningStats()
-    # TODO: Determine what to do for an accuracy function that we can use for the rest of this function
-    paramsCritic = Flux.params(wgan.critic.model)
-    paramsGenerator = Flux.params(wgan.generator.model)
     opt = RMSProp()
 
     @info("Beginning training loop...")
-    best_acc = 0.0
+    best_loss = 10000000000000000000000000000.0
     last_improvement = 0
     for epoch_idx in 1:epochs
-        global best_acc, last_improvement
         # Train for a single epoch
-        train!(generatorLoss, criticLoss, paramsGenerator, paramsCritic, trainSet, opt, clip; cb = wgan.callback)
+        train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
 
-        # TODO: Figure out how to adapt the rest of this stuff that I got from the model zoo for mnist
-        # Calculate accuracy:
-        acc = accuracy(valSet...)
-        push!(modelStats.valAcc, acc)
-        @info(@sprintf("[%d]: Test accuracy: %.4f", epoch_idx, acc))
-    
-        # If our accuracy is good enough, quit out.
-        if acc >= targetAcc
-            @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc*100)%")
+        # Calculate loss:
+        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+        push!(modelStats.valAcc, loss)
+        @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
+     
+        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(0.5))), 28, 28)))
+        # If our loss is good enough, quit out.
+        if targetLoss >= loss
+            @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
             break
         end
 
-        # If this is the best accuracy we've seen so far, save the model out
-        if acc >= best_acc
-            @info(" -> New best accuracy! Saving models out to $(modelName)_<type>.bson")
-            BSON.@save "$(modelName)_critic.bson" wgan.critic.model epoch_idx acc
-            BSON.@save "$(modelName)_generator.bson" wgan.critic.model epoch_idx acc
-            best_acc = acc
-            modelStats.bestValAcc = best_acc
+        # If this is the best loss we've seen so far, save the model out
+        if best_loss >= loss
+            @info(" -> New best loss! Saving models out to $(modelName)_critic/generator-timestamp.bson")
+            #TODO: Figure out saving models -- not working right now
+            #critic = wgan.critic.model
+            #generator = wgan.generator.model
+            #@save "$(modelName)_critic-$(now()).bson" critic epoch_idx loss
+            #@save "$(modelName)_generator-$(now()).bson" generator epoch_idx loss
+            best_loss = loss
+            modelStats.bestValAcc = best_loss
             last_improvement = epoch_idx
         end
 
@@ -199,29 +209,5 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     end
     return modelStats
 end
-
-
-#function oldTrainWGAN(model::WGAN, trainingSet::DataSet)
-#  while !converged(model.θ)
-#      for t = 0:model.n_critic;
-#          # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
-#          x = sample(trainingSet)
-#          # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
-#          z = sampleGenerator(model.θ)
-#          # gw ← ∇w[1/m · sum(fw(x^(i))i=1:m - 1/m · sum(fw(gθ(z^(i))))i=1:m]
-#          gw = 0 # Implement this somehow
-#          # w ← w + α · RMSProp(w, gw)
-#          model.w += model.α*RMSProp(model.w, gw)
-#          # w ← clip(w, −c, c)
-#          model.w = clip(model.w, -model.c, model.c)
-#      end
-#      # Sample {z^(i)}i=1:m ∼ p(z) a batch of prior samples
-#      z = sampleGenerator(model.θ)
-#      # gθ ← −∇θ · 1/m · sum(fw(gθ(z^(i))))i=1:m
-#      gθ = 0 # Implement this somehow
-#      # θ ← θ − α · RMSProp(θ, gθ)
-#      #model.0 -= α * RMSProp(model.θ, gθ)
-#  end
-#end
 
 end
