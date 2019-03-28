@@ -53,7 +53,7 @@ function trainMNIST()
 
     # Make sure our model is nicely precompiled before starting our training loop
     #wgan.critic.model(train_set[1][1])
-    trainWGAN(wgan, train_set, test_set)
+    trainWGAN(wgan, train_set, test_set, modelName = "mnist_mlp")
 
 end
 

@@ -35,12 +35,21 @@ struct MLPCritic <: Critic
 end
 
 function MLPCritic()
-    model = Chain(Dense(28^2, 128, relu), Dense(128, 32, relu), Dense(32, 1))
+    model = Chain(
+        Dense(28^2, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, 1))
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(Dense(100, 128, relu), Dense(128, 28^2, σ))
+    model = Chain(
+        Dense(100, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, 28^2, σ)
+    )
     return MLPGenerator(model)
 end
 
@@ -64,10 +73,6 @@ end
 function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
     return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
 end
-# NOTES:
-# - Make sure to normalize the images, as the generator outputs
-# values in (0,1).
-# - Try an initial LR of 5e-5. That's what they use in the WGAN paper.
 
 struct StopException <: Exception end
 call(f, xs...) = f(xs...)
@@ -106,18 +111,19 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
-                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
                 end
                 update!(optimizer, paramsGenerator, priorgs)
             else
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
                 end
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
             end
+            cb()
             t += 1
         catch ex
             if ex isa StopException
@@ -157,24 +163,28 @@ criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,2}, Z::AbstractArra
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = 0.001, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5)
-    @info("Beginning training function...")
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5
+)
     modelStats = LearningStats()
     opt = RMSProp()
+    function lossCb()
+        @show(criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0))))
+        @show(generatorLoss(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0))))
+    end
 
     @info("Beginning training loop...")
-    best_loss = 10000000000000000000000000000.0
+    best_loss = Inf32
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
-        train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
+        train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = throttle(lossCb, 10))
 
         # Calculate loss:
-        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+        loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
      
-        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(0.5))), 28, 28)))
+        save("images/$(modelName)/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(1.0))), 28, 28)))
         # If our loss is good enough, quit out.
         if targetLoss >= loss
             @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
