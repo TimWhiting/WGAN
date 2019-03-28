@@ -34,6 +34,46 @@ struct MLPCritic <: Critic
     model
 end
 
+function DCGANCritic()
+    model = Chain(Conv2d((3, 3), 1 => 16, pad = (1, 1)),
+    BatchNorm(16, relu),
+    x->maxpool(x, (2, 2)),
+
+    # Second convolution, operating upon a 14x14 image
+    Conv2d((3, 3), 16 => 32, pad = (1, 1)),
+    BatchNorm(32, relu),
+    x->maxpool(x, (2, 2)),
+
+    # Third convolution, operating upon a 7x7 image
+    Conv2d((3, 3), 32 => 32, pad = (1, 1)),
+    BatchNorm(32, relu),
+    x->maxpool(x, (2, 2)),
+
+    # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
+    # which is where we get the 288 in the `Dense` layer below:
+    x->reshape(x, :, size(x, 4)),
+    Dense(288, 1),
+    )
+    return DCGANCritic(model)
+end
+
+function DCGANGenerator()
+    model = Chain(Dense(100, 288),
+    x->reshape(x, 3, 3, 32, :),
+    ConvTranspose((3, 3), 32 => 32),
+    BatchNorm(32, relu),
+
+    # Second convolution, operating upon a 14x14 image
+    ConvTranspose((3, 3), 32 => 16),
+    BatchNorm(16, relu),
+
+    # Third convolution, operating upon a 7x7 image
+    ConvTranspose((3, 3), 16 => 1, σ),
+    )
+
+    return DCGANGenerator(model)
+end
+
 function MLPCritic()
     model = Chain(Dense(28^2, 128, relu), Dense(128, 32, relu), Dense(32, 1))
     return MLPCritic(model)
@@ -55,10 +95,17 @@ struct WGAN
     callback::Function
 end
 
-function WGAN()
-    # TODO: Add versions with DCGAN, remember batch normalization
-    # TODO: Fix these parameters
-    return WGAN(Float32(.00005), Float32(.01), 64, 100, 5, MLPCritic(), MLPGenerator(), ()->())
+# TODO: Make default parameters good
+function WGAN(;learningRate = Float32(.00005),clippingParam =  Float32(.01), batchSize = 64, generatorInputSize = 100, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
+    if dcganCritic
+        if dcganGenerator
+            return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), DCGANGenerator(), ()->())
+        else
+            return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), MLPGenerator(), ()->())
+        end
+    else
+        return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, MLPCritic(), MLPGenerator(), ()->())
+    end
 end
 
 function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
