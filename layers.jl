@@ -44,6 +44,28 @@ Performs forward propagation on the input array `x`.
 """
 (l::Connected)(x::AbstractArray) = l.σ.(l.W * x .+ l.b)
 
+function makeConvMat(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, init::Function)
+    W = param(init(filter, filter, inCh, outCh))
+    numColSteps = xWidth - filter + 1
+    numRowSteps = xHeight - filter + 1
+    convMat = Array{Any}(undef, numColSteps*numRowSteps, xWidth*xHeight, inCh, outCh)
+    convMat[:] = zeros(size(convMat)...)
+    convMatⱼ = 0
+    for inChᵢ in 1:inCh, outChᵢ in 1:outCh
+        for convMatᵢ in 1:size(convMat)[1]
+            # Add a row to (convMat), the convolution transpose matrix
+            # which will contain the weights (W) within it.
+            convMatⱼ = Int(floor((convMatᵢ-1) / numColSteps) * xWidth) + (convMatᵢ-1) % numRowSteps + 1
+            for Wᵢ in 1:filter
+                # Insert row Wᵢ of W into row convMatᵢ of convMat at the proper place.
+                convMat[convMatᵢ, convMatⱼ:(convMatⱼ+filter-1), inChᵢ, outChᵢ] = W[Wᵢ, :, inChᵢ, outChᵢ]
+                convMatⱼ += xWidth
+            end
+        end
+    end
+    return convMat
+end
+
 """A convolutional NN layer"""
 struct Convolution{F,A,V}
     W::A
@@ -52,15 +74,17 @@ struct Convolution{F,A,V}
     filterDim::Int
     inCh::Int
     outCh::Int
+    xWidth::Int
+    xHeight::Int
 end
 
-function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = glorot_uniform)
+function Convolution(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
     # Weights will have dimensions (filter x filter x inCh x outCh)
     # i.e. there is a filter of weights for each input channel of each feature map.
     # Each feature map only has one bias weight.
-    W = param(init(filter, filter, inCh, outCh))
+    W = makeConvMat(filter, inCh, outCh, xWidth, xHeight, init)
     b = param(zeros(outCh))
-    return Convolution(W, b, σ, filter, inCh, outCh) 
+    return Convolution(W, b, σ, filter, inCh, outCh, xWidth, xHeight) 
 end
 
 Flux.@treelike Convolution
@@ -70,22 +94,23 @@ Performs forward convolution on the input array `x`. `x` should be
 in the HWCN (height-width-channels-batchsize) format.
 """
 function (c::Convolution)(x::AbstractArray)
+    if size(x)[1] != c.xHeight
+        throw(ArgumentError("Incoming array `x` must have $(c.xHeight) rows, not $(size(x)[1])"))
+    elseif size(x)[2] != c.xWidth
+        throw(ArgumentError("Incoming array `x` must have $(c.xWidth) columns, not $(size(x)[2])"))
+    end
+
+    batchSize = size(x)[4]
+    # flatten each channel into a vector
+    flatX = reshape(x, size(x)[1] * size(x)[2], size(x)[3], batchSize)
     # Initialize the pre-activated feature map values
-    xDimRows, xDimCols, _, batchSize = size(x)
-    net = Array{Any}(undef, xDimRows - c.filterDim + 1, xDimCols - c.filterDim + 1, c.outCh, batchSize)
+    net = Array{Any}(undef, c.xHeight - c.filterDim + 1, c.xWidth - c.filterDim + 1, c.outCh, batchSize)
     # Compute the nets
-    numRowSteps, numColSteps = size(net)[1:2]
     for batchᵢ in 1:batchSize, featMap in 1:c.outCh
-        # convolve over the input matrix to get
-        # this feature map
-        for netⱼ in 1:numColSteps, netᵢ in 1:numRowSteps
-            xRows = netᵢ:(netᵢ + c.filterDim - 1)
-            xCols = netⱼ:(netⱼ + c.filterDim - 1)
-            chProducts = sum(sum(x[xRows,xCols, channel, batchᵢ] .* c.W[:, :, channel, featMap]) for channel in 1:c.inCh)
-            net[netᵢ, netⱼ, featMap, batchᵢ] = chProducts
-        end
+        # Calculate and sum the nets across all input channels
+        chNets = sum(c.W[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
         # Add the bias
-        net[:,:,featMap,batchᵢ] .+ c.b[featMap]
+        net[:, :, featMap, batchᵢ] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
     end
     # Activate
     return c.σ.(net)
@@ -93,7 +118,7 @@ end
 
 """A convolutional transpose NN layer"""
 struct ConvolutionTranspose{F,A,V}
-    CTM::A # ctm stands for Convolution Transpose Matrix 
+    W::A # The Convolution Transpose Matrix 
     b::V
     σ::F
     filterDim::Int
@@ -104,32 +129,15 @@ struct ConvolutionTranspose{F,A,V}
 end
 
 function ConvolutionTranspose(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
-    # Final convolution transpose matrix (CTM) will have dimensions
+    # Final convolution transpose matrix (W) will have dimensions
     # (filter^2 x elementsInX x inCh x outCh).
     # Each feature map only has one bias weight.
-    W = param(init(filter, filter, inCh, outCh))
     b = param(zeros(outCh))
-    numColSteps = xWidth - filter + 1
-    numRowSteps = xHeight - filter + 1
-    # We initialize CTM to be of type Any so it can hold both floats untracked
+    # We initialize W to be of type Any so it can hold both floats untracked
     # by Flux's automatic differentiator AND the weights that are.
-    CTM = Array{Any}(undef, numColSteps*numRowSteps, xWidth*xHeight, inCh, outCh)
-    CTM[:] = zeros(size(CTM)...)
-    CTMⱼ = 0
-    for inChᵢ in 1:inCh, outChᵢ in 1:outCh
-        for CTMᵢ in 1:size(CTM)[1]
-            # Add a row to (CTM), the convolution transpose matrix
-            # which will contain the weights (W) within it.
-            CTMⱼ = Int(floor((CTMᵢ-1) / numColSteps) * xWidth) + (CTMᵢ-1) % numRowSteps + 1
-            for Wᵢ in 1:filter
-                # Insert row Wᵢ of W into row CTMᵢ of CTM at the proper place.
-                CTM[CTMᵢ, CTMⱼ:(CTMⱼ+filter-1), inChᵢ, outChᵢ] = W[Wᵢ, :, inChᵢ, outChᵢ]
-                CTMⱼ += xWidth
-            end
-        end
-    end
-    CTM = permutedims(CTM, [2,1,3,4])
-    return ConvolutionTranspose(CTM, b, σ, filter, inCh, outCh, xWidth, xHeight) 
+    W = makeConvMat(filter, inCh, outCh, xWidth, xHeight, init)
+    W = permutedims(W, [2,1,3,4])
+    return ConvolutionTranspose(W, b, σ, filter, inCh, outCh, xWidth, xHeight) 
 end
 
 Flux.@treelike ConvolutionTranspose
@@ -154,7 +162,7 @@ function (c::ConvolutionTranspose)(x::AbstractArray)
     numRowSteps, numColSteps = size(net)[1:2]
     for batchᵢ in 1:batchSize, featMap in 1:c.outCh
         # Calculate and sum the nets across all input channels
-        chNets = sum(c.CTM[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
+        chNets = sum(c.W[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
         # Add the bias
         net[:, :, featMap, batchᵢ] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
     end
