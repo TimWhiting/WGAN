@@ -10,7 +10,7 @@
 # using Random
 # using Flux: glorot_uniform
 
-# useFluxVersion = true
+# useFluxVersion = false
 
 # Random.seed!(0)
 
@@ -22,10 +22,9 @@
 # myInit = randuFn(0,0.2)
 
 # if useFluxVersion
-# using Flux: glorot_uniform
-#     myCTLayer = ConvTranspose((3,3), 1=>1, init = glorot_uniform)
+#     myCTLayer = ConvTranspose((3,3), 1=>1)
 # else
-#     myCTLayer = ConvolutionTranspose(3, 1, 1, 4, 4, init = glorot_uniform)
+#     myCTLayer = ConvolutionTranspose(3, 1, 1, 4, 4)
 # end
 
 # function loss(x, y)
@@ -117,9 +116,9 @@ test_set = makeMinibatch(test_imgs, test_labels, 1:length(test_imgs))
 @info("Constructing model...")
 if USE_HOMEMADE_CONV
     model = Chain(
-        Convolution(5, 1, 16, relu),
-        Convolution(5, 16, 32, relu),
-        Convolution(5, 32, 10, relu),
+        Convolution(5, 1, 16, 28, 28, relu),
+        Convolution(5, 16, 16, 24, 24, relu),
+        Convolution(5, 16, 10, 20, 20, relu),
         x -> reshape(x, :, size(x, 4)),
         # x -> println("new size == $(size(x))"),
         Dense(2560, 10),
@@ -128,8 +127,8 @@ if USE_HOMEMADE_CONV
 else
     model = Chain(
         Conv((5, 5), 1=>16, relu),
-        Conv((5, 5), 16=>32, relu),
-        Conv((5, 5), 32=>10, relu),
+        Conv((5, 5), 16=>16, relu),
+        Conv((5, 5), 16=>10, relu),
         x -> reshape(x, :, size(x, 4)),
         # x -> println("new size == $(size(x))"),
         Dense(2560, 10),
@@ -138,10 +137,11 @@ else
 end
 
 # Load model and datasets onto GPU, if enabled
-train_set = gpu.(train_set)
-test_set = gpu.(test_set)
-model = gpu(model)
+# train_set = gpu.(train_set)
+# test_set = gpu.(test_set)
+# model = gpu(model)
 
+@info("Precompiling model...")
 # Make sure our model is nicely precompiled before starting our training loop
 model(train_set[1][1])
 
@@ -160,9 +160,47 @@ end
 opt = ADAM(0.001)
 evalcb = () -> @show(loss(train_set[1]...))
 
-results = trainOne(loss, model, train_set, test_set, modelName = "mnist_conv", epochs = 2)
+if USE_HOMEMADE_CONV
+    modelName = "mnist_homemade_conv"
+else
+    modelName = "mnist_conv"
+end
 
-plotLearningStats(results, "mnist_conv_results", true)
+results = trainOne(loss, model, train_set, test_set, modelName = modelName, epochs = 2)
 
-# Note - Flux version of MNIST was able to get validation set accuracy of 0.9781
+plotLearningStats(results, "$(modelName)_results", true)
+
+# Note - Flux version of MNIST was able to get validation set accuracy of 0.9803
 # after just 2 epochs.
+
+#########################################################
+#### EXPERIMENT 3: TESTING THE HOMEMADE CONVOLUTIONS ####
+#########################################################
+
+# using layers
+
+# # Source: https://towardsdatascience.com/up-sampling-with-transposed-convolution-9ae4f2df52d0
+
+# wInit(dims...) = reshape([1 4 1; 1 4 3; 3 3 1;], 3, 3, 1, 1)
+
+# # Testing the normal convolution
+
+# x = reshape(transpose([4 5 8 7; 1 8 8 8; 3 6 6 4; 6 5 7 8;]), 4, 4, 1, 1)
+# expectedOut = transpose([122 148; 126 134;])
+
+# myConv = Convolution(3, 1, 1, 4, 4, init = wInit)
+# out = myConv(x)
+# @info("For the Convolution:")
+# println("Actual output:\n$(out)")
+# println("Expected output:\n$(expectedOut)")
+
+# # Testing the convolution transpose
+
+# xT = reshape(transpose([2 1; 4 4;]), 2, 2, 1, 1)
+# expectedOutT = transpose([2 9 6 1; 6 29 30 7; 10 29 33 13; 12 24 16 4;])
+
+# myConvT = ConvolutionTranspose(3, 1, 1, 4, 4, init = wInit)
+# outT = myConvT(xT)
+# @info("For the Convolution Transpose:")
+# println("Actual output:\n$(outT)")
+# println("Expected output:\n$(expectedOutT)")
