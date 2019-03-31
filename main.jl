@@ -8,13 +8,12 @@ using wgan: WGAN, trainWGAN
 #precompile(wgan)
 # Bundle images together with labels and group into minibatchess
 
-function makeMinibatch(X, Y, idxs)
+function makeMinibatch(X, idxs)
     X_batch = Array{Float32}(undef, size(X[1])..., 1, length(idxs))
     for i in 1:length(idxs)
         X_batch[:, :, :, i] = Float32.(X[idxs[i]])
     end
-    Y_batch = onehotbatch(Y[idxs], 0:9)
-    return (X_batch, Y_batch)
+    return X_batch
 end
 
 
@@ -26,7 +25,7 @@ function make_minibatch_mlp(X, idxs)
     return X_batch
 end
 
-function trainMNIST()
+function trainMNISTMLP()
 
     # Load labels and images from Flux.Data.MNIST
     @info("Loading data set")
@@ -34,17 +33,17 @@ function trainMNIST()
 
     batch_size = 64
     mb_idxs = partition(1:length(train_imgs), batch_size)
-    train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
+    train_set = [makeMinibatch(train_imgs, i) for i in mb_idxs]
 
     # Prepare test set as one giant minibatch:
     test_imgs = MNIST.images(:test)
-    test_set = make_minibatch_mlp(test_imgs, 1:length(test_imgs))
+    test_set = makeMinibatch(test_imgs, 1:length(test_imgs))
 
     # Define our model.  We will use a simple convolutional architecture with
     # three iterations of Conv -> ReLU -> MaxPool, followed by a final Dense
     # layer that feeds into a softmax probability output.
     @info("Constructing model...")
-    wgan = WGAN()
+    wgan = WGAN(;dcganCritic = true)
 
     # Load model and datasets onto GPU, if enabled
     # train_set = gpu.(train_set)
@@ -57,7 +56,7 @@ function trainMNIST()
 
 end
 
-trainMNIST()
+trainMNISTMLP()
 
 
 end # module main

@@ -2,7 +2,7 @@ module wgan
 using Juno
 
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool
 using Base.Iterators: repeated, partition
 using Printf
 using BSON: @save
@@ -35,17 +35,17 @@ struct MLPCritic <: Critic
 end
 
 function DCGANCritic()
-    model = Chain(Conv2d((3, 3), 1 => 16, pad = (1, 1)),
+    model = Chain(Conv((3, 3), 1 => 16, pad = (1, 1)),
     BatchNorm(16, relu),
     x->maxpool(x, (2, 2)),
 
     # Second convolution, operating upon a 14x14 image
-    Conv2d((3, 3), 16 => 32, pad = (1, 1)),
+    Conv((3, 3), 16 => 32, pad = (1, 1)),
     BatchNorm(32, relu),
     x->maxpool(x, (2, 2)),
 
     # Third convolution, operating upon a 7x7 image
-    Conv2d((3, 3), 32 => 32, pad = (1, 1)),
+    Conv((3, 3), 32 => 32, pad = (1, 1)),
     BatchNorm(32, relu),
     x->maxpool(x, (2, 2)),
 
@@ -80,7 +80,7 @@ function MLPCritic()
 end
 
 function MLPGenerator()
-    model = Chain(Dense(100, 128, relu), Dense(128, 28^2, σ))
+    model = Chain(Dense(100, 128, relu), Dense(128, 28^2, σ), x->reshape(x, 28, 28, :))
     return MLPGenerator(model)
 end
 
@@ -200,7 +200,7 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,2}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
+criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,4}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = 0.001, modelName = "model",
