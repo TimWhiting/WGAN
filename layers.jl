@@ -18,7 +18,7 @@ end
 # We call param() on each thing we're training so Flux
 # keeps track of computations that take place on those things,
 # so it can perform backprop on them.
-function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = glorot_uniform, initb::Function = randn)
+function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = glorot_uniform, initb::Function = glorot_uniform)
     W = param(initW(outDim, inDim))
     b = param(initb(outDim))
     return Connected(W, b, σ)
