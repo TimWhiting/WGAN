@@ -205,7 +205,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
-    opt = RMSProp(n = .0001)
+    opt = RMSProp(.0001)
 
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
@@ -215,7 +215,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         gpu(wgan.generator.model)
         gpu(wgan.critic.model)
         gpu.(trainSet)
-        
+
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
     
         # Calculate loss:
