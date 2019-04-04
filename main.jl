@@ -31,7 +31,7 @@ function trainMNISTMLP()
     @info("Loading data set")
     train_imgs = MNIST.images()
 
-    batch_size = 64
+    batch_size = 32
     mb_idxs = partition(1:length(train_imgs), batch_size)
     train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
 

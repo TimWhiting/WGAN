@@ -34,6 +34,9 @@ struct MLPCritic <: Critic
     model
 end
 
+function randu(dims::Tuple{Vararg{Int64}})
+    return Float32.(rand(dims...) .* 2 .- 1.)
+end
 function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
     return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
 end
@@ -102,7 +105,7 @@ struct WGAN
 end
 
 # TODO: Make default parameters good
-function WGAN(;learningRate = Float32(.00005),clippingParam =  Float32(.01), batchSize = 64, generatorInputSize = 10, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
+function WGAN(;learningRate = Float32(.0001),clippingParam =  Float32(.01), batchSize = 32, generatorInputSize = 10, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
     if dcganCritic
         if dcganGenerator
             return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), DCGANGenerator(), ()->())
@@ -186,19 +189,19 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
         try
             if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update               
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                    lossCritic(wgan.critic, wgan.generator, d, randu((wgan.n, wgan.m)))
                 end
                 update_pos!(optimizer, paramsCritic, gs)
                 #postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
-                    lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                    lossGenerator(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
                 end
                 update!(optimizer, paramsGenerator, priorgs)
             else
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+                    lossCritic(wgan.critic, wgan.generator, d, randu((wgan.n, wgan.m)))
                 end
                 update_pos!(optimizer, paramsCritic, gs)
                 #postProcessCritic(paramsCritic, wgan.c)
@@ -264,11 +267,11 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
     
         # Calculate loss:
-        loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+        loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
      
-        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randGaussian((wgan.n, 1), Float32(0.0), Float32(0.5))), 28, 28)))
+        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
         # If our loss is good enough, quit out.
         if targetLoss >= loss
             @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
