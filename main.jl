@@ -43,7 +43,7 @@ function trainMNISTMLP()
     # three iterations of Conv -> ReLU -> MaxPool, followed by a final Dense
     # layer that feeds into a softmax probability output.
     @info("Constructing model...")
-    wgan = WGAN(;dcganCritic = true)
+    wgan = WGAN(;dcganCritic = false)
 
     # Load model and datasets onto GPU, if enabled
     # train_set = gpu.(train_set)

@@ -79,12 +79,12 @@ end
 
 
 function MLPCritic()
-    model = Chain(Dense(28^2, 128, relu), Dense(128, 32, relu), Dense(32, 1))
+    model = Chain(x->reshape(x, 28^2, :), Dense(28^2, 128, σ), Dense(128, 1))
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(Dense(100, 128, relu), Dense(128, 28^2, σ), x->reshape(x, 28, 28, :))
+    model = Chain(Dense(10, 128, σ), Dense(128, 28^2, σ), x->reshape(x, 28, 28, :))
     return MLPGenerator(model)
 end
 
@@ -100,7 +100,7 @@ struct WGAN
 end
 
 # TODO: Make default parameters good
-function WGAN(;learningRate = Float32(.00005),clippingParam =  Float32(.01), batchSize = 64, generatorInputSize = 100, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
+function WGAN(;learningRate = Float32(.00005),clippingParam =  Float32(.01), batchSize = 64, generatorInputSize = 10, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
     if dcganCritic
         if dcganGenerator
             return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), DCGANGenerator(), ()->())
@@ -122,6 +122,19 @@ struct StopException <: Exception end
 call(f, xs...) = f(xs...)
 runall(f) = f
 runall(fs::AbstractVector) = ()->foreach(call, fs)
+
+
+
+function update_pos!(opt, x, x̄)
+    update!(x, apply!(opt, x, data(x̄)))
+end
+  
+  function update_pos!(opt, xs::Params, gs)
+    for x in xs
+        update_pos!(opt, x, gs[x])
+    end
+end
+
 """
     train!(loss, paramsGenerator, paramsCritic, data, optimizer; cb)
 
@@ -152,7 +165,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                 gs = gradient(paramsCritic) do # Make this a batch
                     lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
-                update!(optimizer, paramsCritic, gs)
+                update_pos!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
                     lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
@@ -164,7 +177,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                 gs = gradient(paramsCritic) do # Make this a batch
                     lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
-                update!(optimizer, paramsCritic, gs)
+                update_pos!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
             end
             t += 1
@@ -182,9 +195,9 @@ end
 function clip(params::Params, c::Float32)
     mapparams(params) do param
         if param > c
-            return param = c
+            return c
         elseif param < -c
-            return param = -c
+            return -c
         else
             return param
         end
@@ -195,7 +208,7 @@ end
 """
 Calculates the generator's loss, using a sample of Z
 """
-generatorLoss(c::Critic, g::Generator, Z::AbstractArray{Float32,2}) = mean(c.model(g.model(Z)))
+generatorLoss(c::Critic, g::Generator, Z::AbstractArray{Float32,2}) = -mean(c.model(g.model(Z)))
 
 """
 Calculates the critic's loss, using a sample of `X` and sample
@@ -205,7 +218,7 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
+criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2}) = (mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = 0.001, modelName = "model",
