@@ -84,20 +84,16 @@ end
 
 
 function MLPCritic()
-    model = Chain(
-        x->reshape(x, 28^2, :),
+    model = Chain(x->reshape(x, 28^2, :),
         Dense(28^2, 128, relu),
-        Dense(128, 1)
-    )
+        Dense(128, 1))
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(
-        Dense(10, 128, relu),
+    model = Chain(Dense(10, 128, relu),
         Dense(128, 28^2, σ),
-        x->reshape(x, 28, 28, :)
-    )
+        x->reshape(x, 28, 28, :))
     return MLPGenerator(model)
 end
 
@@ -267,8 +263,11 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
-     
-        save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
+        images = wgan.generator.model(randu((wgan.n, 40)))
+        mkpath("images/mnist_mlp/image_epoch_$(epoch_idx)/")
+        for i = 1:40
+            save("images/mnist_mlp/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
+        end
         # If our loss is good enough, quit out.
         if targetLoss >= loss
             @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
