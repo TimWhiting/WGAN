@@ -212,8 +212,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
-        gpu(wgan.generator.model)
-        gpu(wgan.critic.model)
+        gpu(wgan)
         gpu.(trainSet)
 
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
