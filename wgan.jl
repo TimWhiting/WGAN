@@ -244,7 +244,7 @@ the real data.
 criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2}) = (mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
-    epochs = 100, targetLoss = 0.001, modelName = "model",
+    epochs = 100, targetLoss = -500, modelName = "model",
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
@@ -264,7 +264,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
     
         # Calculate loss:
-        loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
+        loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
      
