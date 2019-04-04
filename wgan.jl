@@ -256,8 +256,9 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     
         # Calculate loss:
         loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
+        gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
         push!(modelStats.valAcc, loss)
-        @info(@sprintf("[%d]: Test loss: %.4f", epoch_idx, loss))
+        @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
      
         save("images/mnist_mlp/image_epoch_$(epoch_idx).png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
         # If our loss is good enough, quit out.
