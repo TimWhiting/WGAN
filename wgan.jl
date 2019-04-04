@@ -1,7 +1,7 @@
 module wgan
 using Juno
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu
+using Flux
 using Base.Iterators: repeated, partition
 using Printf
 using BSON: @save
@@ -12,6 +12,8 @@ using Images
 using Dates: now
 using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
+
+const ϵ = 1e-8
 
 abstract type Generator end
 abstract type Critic end
@@ -122,6 +124,21 @@ struct StopException <: Exception end
 call(f, xs...) = f(xs...)
 runall(f) = f
 runall(fs::AbstractVector) = ()->foreach(call, fs)
+data(x::TrackedArray) = x.data
+tracker(x::TrackedArray) = x.tracker
+
+function update_clip!(x::TrackedArray, Δ; c = .01)
+    x.data .+= data(Δ)
+    for (index, xd) in enumerate(x.data)
+        if xd > c
+            x.data[index] = c
+        elseif xd < -c
+            x.data[index] = -c
+        end
+    end
+    tracker(x).grad .= 0
+    return x
+end
 
 function apply!(o::RMSProp, x, Δ)
     η, ρ = o.eta, o.rho
@@ -132,7 +149,7 @@ end
   
 
 function update_pos!(opt, x, x̄)
-    update!(x, apply!(opt, x, data(x̄)))
+    update_clip!(x, apply!(opt, x, data(x̄)))
 end
   
   function update_pos!(opt, xs::Params, gs)
@@ -172,7 +189,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                     lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
                 update_pos!(optimizer, paramsCritic, gs)
-                postProcessCritic(paramsCritic, wgan.c)
+                #postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
                     lossGenerator(wgan.critic, wgan.generator, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
@@ -184,7 +201,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                     lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
                 update_pos!(optimizer, paramsCritic, gs)
-                postProcessCritic(paramsCritic, wgan.c)
+                #postProcessCritic(paramsCritic, wgan.c)
             end
             t += 1
         catch ex
