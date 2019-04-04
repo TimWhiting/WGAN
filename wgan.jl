@@ -1,7 +1,7 @@
 module wgan
 using Juno
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu, apply!
 using Base.Iterators: repeated, partition
 using Printf
 using BSON: @save
