@@ -1,7 +1,7 @@
 module wgan
 using Juno
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu, apply!
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu
 using Base.Iterators: repeated, partition
 using Printf
 using BSON: @save
@@ -123,7 +123,13 @@ call(f, xs...) = f(xs...)
 runall(f) = f
 runall(fs::AbstractVector) = ()->foreach(call, fs)
 
-
+function apply!(o::RMSProp, x, Δ)
+    η, ρ = o.eta, o.rho
+    acc = get!(o.acc, x, zero(x))::typeof(data(x))
+    @. acc = ρ * acc + (1 - ρ) * Δ^2
+    @. Δ *= η / (√acc + ϵ)
+end
+  
 
 function update_pos!(opt, x, x̄)
     update!(x, apply!(opt, x, data(x̄)))
