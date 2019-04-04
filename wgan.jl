@@ -1,6 +1,5 @@
 module wgan
 using Juno
-
 using Flux.Data.MNIST, Statistics
 using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool
 using Base.Iterators: repeated, partition
@@ -13,7 +12,6 @@ using Images
 using Dates: now
 using NNlib: relu, σ
 import Flux.Tracker: Params, gradient, data, update!
-
 
 abstract type Generator end
 abstract type Critic end
@@ -35,42 +33,42 @@ struct MLPCritic <: Critic
 end
 
 function DCGANCritic()
-    model = Chain(Conv((3, 3), 1 => 16, pad = (1, 1)),
-    BatchNorm(16, relu),
-    x->maxpool(x, (2, 2)),
+    model = Chain(x->reshape(x, 28, 28, 1, :),
+        Conv((3, 3), 1 => 16, pad = (1, 1)),
+        BatchNorm(16, relu),
+        x->maxpool(x, (2, 2)),
 
-    # Second convolution, operating upon a 14x14 image
-    Conv((3, 3), 16 => 32, pad = (1, 1)),
-    BatchNorm(32, relu),
-    x->maxpool(x, (2, 2)),
+        # Second convolution, operating upon a 14x14 image
+        Conv((3, 3), 16 => 32, pad = (1, 1)),
+        BatchNorm(32, relu),
+        x->maxpool(x, (2, 2)),
 
-    # Third convolution, operating upon a 7x7 image
-    Conv((3, 3), 32 => 32, pad = (1, 1)),
-    BatchNorm(32, relu),
-    x->maxpool(x, (2, 2)),
+        # Third convolution, operating upon a 7x7 image
+        Conv((3, 3), 32 => 32, pad = (1, 1)),
+        BatchNorm(32, relu),
+        x->maxpool(x, (2, 2)),
 
-    # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
-    # which is where we get the 288 in the `Dense` layer below:
-    x->reshape(x, :, size(x, 4)),
-    Dense(288, 1),
+        # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
+        # which is where we get the 288 in the `Dense` layer below:
+        x->reshape(x, :, size(x, 4)),
+        Dense(288, 1),
     )
     return DCGANCritic(model)
 end
 
 function DCGANGenerator()
     model = Chain(Dense(100, 288),
-    x->reshape(x, 3, 3, 32, :),
-    ConvTranspose((3, 3), 32 => 32),
-    BatchNorm(32, relu),
+        x->reshape(x, 3, 3, 32, :),
+        ConvTranspose((3, 3), 32 => 32),
+        BatchNorm(32, relu),
 
-    # Second convolution, operating upon a 14x14 image
-    ConvTranspose((3, 3), 32 => 16),
-    BatchNorm(16, relu),
+        # Second convolution, operating upon a 14x14 image
+        ConvTranspose((3, 3), 32 => 16),
+        BatchNorm(16, relu),
 
-    # Third convolution, operating upon a 7x7 image
-    ConvTranspose((3, 3), 16 => 1, σ),
+        # Third convolution, operating upon a 7x7 image
+        ConvTranspose((3, 3), 16 => 1, σ),
     )
-
     return DCGANGenerator(model)
 end
 
@@ -143,12 +141,12 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
     paramsCritic = Params(params(wgan.critic.model))
     paramsGenerator = Params(params(wgan.generator.model))
     cb = runall(cb)
-    t = 0
+    t = 1
     @progress for d in data
         try
             if t % wgan.n_critic == 0 # If this is the nth batch, do both critic and generator update               
                 gs = gradient(paramsCritic) do # Make this a batch
-                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(1.0)))
+                    lossCritic(wgan.critic, wgan.generator, d, randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
                 end
                 update!(optimizer, paramsCritic, gs)
                 postProcessCritic(paramsCritic, wgan.c)
@@ -168,7 +166,7 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
             t += 1
         catch ex
             if ex isa StopException
-                break
+                break 
             else
                 rethrow(ex)
             end
@@ -200,22 +198,26 @@ Minimizing this loss function will maximize the critic's ability
 to differentiate between the distribution of the generated data and
 the real data.
 """
-criticLoss(c::Critic, g::Generator, X::AbstractArray{Float32,4}, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
+criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2}) = -(mean(c.model(X)) - mean(c.model(g.model(Z))))
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = 0.001, modelName = "model",
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
-    opt = RMSProp()
+    opt = RMSProp(n = .0001)
 
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
+        gpu(wgan.generator.model)
+        gpu(wgan.critic.model)
+        gpu.(trainSet)
+        
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
-
+    
         # Calculate loss:
         loss = -criticLoss(wgan.critic, wgan.generator, trainSet[1], randGaussian((wgan.n, wgan.m), Float32(0.0), Float32(0.5)))
         push!(modelStats.valAcc, loss)

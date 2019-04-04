@@ -33,11 +33,11 @@ function trainMNISTMLP()
 
     batch_size = 64
     mb_idxs = partition(1:length(train_imgs), batch_size)
-    train_set = [makeMinibatch(train_imgs, i) for i in mb_idxs]
+    train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
 
     # Prepare test set as one giant minibatch:
     test_imgs = MNIST.images(:test)
-    test_set = makeMinibatch(test_imgs, 1:length(test_imgs))
+    test_set = make_minibatch_mlp(test_imgs, 1:length(test_imgs))
 
     # Define our model.  We will use a simple convolutional architecture with
     # three iterations of Conv -> ReLU -> MaxPool, followed by a final Dense
