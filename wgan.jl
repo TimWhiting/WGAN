@@ -1,7 +1,7 @@
 module wgan
 using Juno
 using Flux.Data.MNIST, Statistics
-using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool
+using Flux: onehotbatch, onecold, crossentropy, throttle, RMSProp, Dense, Chain, params, Params, mapparams, Conv, ConvTranspose, BatchNorm, maxpool, gpu
 using Base.Iterators: repeated, partition
 using Printf
 using BSON: @save
@@ -206,14 +206,16 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     @info("Beginning training function...")
     modelStats = LearningStats()
     opt = RMSProp(.0001)
-
+    mkpath("images/mnist_mlp/")
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
-        #gpu(wgan)
-        #gpu.(trainSet)
+        
+        gpu(wgan.critic.model)
+        gpu(wgan.generator.model)
+        gpu.(trainSet)
 
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
     
