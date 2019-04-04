@@ -180,7 +180,7 @@ The callback can call `Flux.stop()` to interrupt the training loop.
 
 Multiple optimisers and callbacks can be passed to `opt` and `cb` as arrays.
 """
-function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProcessCritic; cb = ()->())
+function train!(lossGenerator, lossCritic, wgan::WGAN, data, optGenerator, optCritic; cb = ()->())
     paramsCritic = Params(params(wgan.critic.model))
     paramsGenerator = Params(params(wgan.generator.model))
     cb = runall(cb)
@@ -191,19 +191,19 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
                 gs = gradient(paramsCritic) do # Make this a batch
                     lossCritic(wgan.critic, wgan.generator, d, randu((wgan.n, wgan.m)))
                 end
-                update_pos!(optimizer, paramsCritic, gs)
+                update_pos!(optCritic, paramsCritic, gs)
                 #postProcessCritic(paramsCritic, wgan.c)
                 priorgs = gradient(paramsGenerator) do # Make this a batch
                     lossGenerator(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
                 end
-                update!(optimizer, paramsGenerator, priorgs)
+                update!(optGenerator, paramsGenerator, priorgs)
             else
                 # Sample {x^(i)}i=1:m ~ Pr a batch from the real data
                 # Sample {z^(i)}i=1:m ~ p(z) a batch of prior samples
                 gs = gradient(paramsCritic) do # Make this a batch
                     lossCritic(wgan.critic, wgan.generator, d, randu((wgan.n, wgan.m)))
                 end
-                update_pos!(optimizer, paramsCritic, gs)
+                update_pos!(optCritic, paramsCritic, gs)
                 #postProcessCritic(paramsCritic, wgan.c)
             end
             t += 1
@@ -217,19 +217,6 @@ function train!(lossGenerator, lossCritic, wgan::WGAN, data, optimizer, postProc
     end
 end
 
-
-function clip(params::Params, c::Float32)
-    mapparams(params) do param
-        if param > c
-            return c
-        elseif param < -c
-            return -c
-        else
-            return param
-        end
-        
-    end
-end
 
 """
 Calculates the generator's loss, using a sample of Z
@@ -251,7 +238,8 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
-    opt = RMSProp(wgan.α)
+    optCritic = RMSProp(wgan.α)
+    optGenerator = RMSProp(wgan.α)
     mkpath("images/mnist_mlp/")
     save("images/mnist_mlp/image_epoch_sample.png", colorview(Gray, reshape(trainSet[1], 28, 28, 1, :)[:,:,:,1]))
     @info("Beginning training loop...")
@@ -264,7 +252,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         #gpu(wgan.generator.model)
         #gpu.(trainSet)
 
-        train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
+        train!(generatorLoss, criticLoss, wgan, trainSet, optGenerator, optCritic; cb = wgan.callback)
     
         # Calculate loss:
         loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
