@@ -84,12 +84,20 @@ end
 
 
 function MLPCritic()
-    model = Chain(x->reshape(x, 28^2, :), Dense(28^2, 128, σ), Dense(128, 1))
+    model = Chain(
+        x->reshape(x, 28^2, :),
+        Dense(28^2, 128, relu),
+        Dense(128, 1)
+    )
     return MLPCritic(model)
 end
 
 function MLPGenerator()
-    model = Chain(Dense(10, 128, σ), Dense(128, 28^2, σ), x->reshape(x, 28, 28, :))
+    model = Chain(
+        Dense(10, 128, relu),
+        Dense(128, 28^2, σ),
+        x->reshape(x, 28, 28, :)
+    )
     return MLPGenerator(model)
 end
 
