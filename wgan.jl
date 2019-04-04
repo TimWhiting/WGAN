@@ -32,6 +32,10 @@ struct MLPCritic <: Critic
     model
 end
 
+function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
+    return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
+end
+
 function DCGANCritic()
     model = Chain(x->reshape(x, 28, 28, 1, :),
         Conv((3, 3), 1 => 16, pad = (1, 1)),
@@ -72,6 +76,8 @@ function DCGANGenerator()
     return DCGANGenerator(model)
 end
 
+
+
 function MLPCritic()
     model = Chain(Dense(28^2, 128, relu), Dense(128, 32, relu), Dense(32, 1))
     return MLPCritic(model)
@@ -106,9 +112,7 @@ function WGAN(;learningRate = Float32(.00005),clippingParam =  Float32(.01), bat
     end
 end
 
-function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
-    return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
-end
+
 # NOTES:
 # - Make sure to normalize the images, as the generator outputs
 # values in (0,1).
@@ -178,10 +182,13 @@ end
 function clip(params::Params, c::Float32)
     mapparams(params) do param
         if param > c
-            param = c
+            return param = c
         elseif param < -c
-            param = -c
+            return param = -c
+        else
+            return param
         end
+        
     end
 end
 
@@ -205,17 +212,18 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     patience = 10, minLr = 1e-6, lrDropThreshold = 5)
     @info("Beginning training function...")
     modelStats = LearningStats()
-    opt = RMSProp(.0001)
+    opt = RMSProp(wgan.α)
     mkpath("images/mnist_mlp/")
+    save("images/mnist_mlp/image_epoch_sample.png", colorview(Gray, reshape(trainSet[1], 28, 28, 1, :)[:,:,:,1]))
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
     last_improvement = 0
     for epoch_idx in 1:epochs
         # Train for a single epoch
         
-        gpu(wgan.critic.model)
-        gpu(wgan.generator.model)
-        gpu.(trainSet)
+        #gpu(wgan.critic.model)
+        #gpu(wgan.generator.model)
+        #gpu.(trainSet)
 
         train!(generatorLoss, criticLoss, wgan, trainSet, opt, clip; cb = wgan.callback)
     
@@ -245,17 +253,17 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         end
 
         # If we haven't seen improvement in lrDropThreshold epochs, drop our learning rate:
-        if epoch_idx - last_improvement >= lrDropThreshold && opt.eta > minLr
-            opt.eta /= 10.0
-            @warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
+        #if epoch_idx - last_improvement >= lrDropThreshold && opt.eta > minLr
+            #opt.eta /= 10.0
+            #@warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
             # After dropping learning rate, give it a few epochs to improve
-            last_improvement = epoch_idx
-        end
+            #last_improvement = epoch_idx
+        #end
 
-        if epoch_idx - last_improvement >= patience
-            @warn(" -> We're calling this converged.")
-            break
-        end
+        #if epoch_idx - last_improvement >= patience
+        #    @warn(" -> We're calling this converged.")
+        #    break
+        #end
     end
     return modelStats
 end

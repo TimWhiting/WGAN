@@ -49,7 +49,7 @@ function trainMNISTMLP()
     # train_set = gpu.(train_set)
     # test_set = gpu.(test_set)
     # wgan = gpu(wgan)
-
+    
     # Make sure our model is nicely precompiled before starting our training loop
     #wgan.critic.model(train_set[1][1])
     trainWGAN(wgan, train_set, test_set, modelName = "mnist_mlp")
