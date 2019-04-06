@@ -32,52 +32,82 @@ Note that `trainSet` should be multiple batches, and `valSet` should be
 just one batch.
 """
 function trainOne(loss, model, trainSet, valSet, opt = ADAM(0.001);
-    cb = () -> @show(loss(trainSet[1]...)), epochs = 100,
+    cb = () -> (), epochs = 100,
     targetAcc = 0.999, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5,
+    save = true, earlyExit = true, reportEvery = 1,
+    showWeights = false, accuracy = oneHotClassificationAccuracy
 )
-    # TODO: Track train loss as well
     @info("Beginning training loop...")
     best_acc = 0.0
     best_loss = Inf
     last_improvement = 0
     modelStats = LearningStats()
+    lossWithModel(x, y) = loss(model, x, y)
 
     for epoch_idx in 1:epochs
         best_acc, last_improvement
         # Train for a single epoch
-        Flux.train!(loss, params(model), trainSet, opt, cb = throttle(cb, 10))
+        Flux.train!(lossWithModel, params(model), trainSet, opt, cb = throttle(cb, 10))
 
         # Calculate accuracy:
-        acc = oneHotClassificationAccuracy(model, valSet...)
+        acc = accuracy(model, valSet...)
         push!(modelStats.valAcc, acc)
-        @info(@sprintf("[%d]: Validation accuracy: %.4f", epoch_idx, acc))
+        if epoch_idx % reportEvery == 0
+            @info(@sprintf("[%d]: Validation accuracy: %.4f", epoch_idx, acc))
+        end
 
         # Calculate training loss:
-        trainLoss = loss(trainSet[1]...)
+        trainLoss = lossWithModel(trainSet[1]...)
         push!(modelStats.trainLoss, trainLoss)        
 
         # Calculate validation loss:
-        valLoss = loss(valSet...)
+        valLoss = lossWithModel(valSet...)
         push!(modelStats.valLoss, valLoss)
         if valLoss < best_loss
             best_loss = valLoss
             modelStats.bestValLoss = best_loss
+            last_improvement = epoch_idx
+        end
+        if epoch_idx % reportEvery == 0
+            @info(@sprintf("[%d]: Validation loss: %.6f", epoch_idx, valLoss))
         end
         
         # If our accuracy is good enough, quit out.
-        if acc >= targetAcc
+        if earlyExit && acc >= targetAcc
             @info(" -> Early-exiting: We reached our target accuracy of $(targetAcc*100)%")
             break
         end
 
         # If this is the best accuracy we've seen so far, save the model out
         if acc >= best_acc
-            @info(" -> New best accuracy! Saving model out to $(modelName).bson")
-            BSON.@save "$(modelName).bson" model epoch_idx acc
+            if epoch_idx % reportEvery == 0
+                @info(" -> New best accuracy!")
+            end
+            if save
+                @info(" -> Saving model out to $(modelName).bson")
+                BSON.@save "$(modelName).bson" model epoch_idx acc
+            end
             best_acc = acc
             modelStats.bestValAcc = best_acc
-            last_improvement = epoch_idx
+        end
+
+        if showWeights
+            @info("Model Weights:")
+            for (i, layer) in enumerate(model)
+                if :W in fieldnames(typeof(layer))
+                    @info(@sprintf("[%d]th layer weights:", i))
+                    @info(layer.W)
+                end
+                if :weight in fieldnames(typeof(layer))
+                    @info(@sprintf("[%d]th layer weights:", i))
+                    @info(layer.weight)
+                end
+                if :b in fieldnames(typeof(layer))
+                    @info(@sprintf("[%d]th layer bias weights:", i))
+                    @info(layer.b)
+                end
+            end
         end
 
         # If we haven't seen improvement in lrDropThreshold epochs, drop our learning rate:

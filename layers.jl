@@ -15,13 +15,13 @@ struct Connected{F,S,T}
     σ::F
 end
 
+Connected(W, b) = Connected(W, b, identity)
+
 # We call param() on each thing we're training so Flux
 # keeps track of computations that take place on those things,
 # so it can perform backprop on them.
-function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = glorot_uniform, initb::Function = glorot_uniform)
-    W = param(initW(outDim, inDim))
-    b = param(initb(outDim))
-    return Connected(W, b, σ)
+function Connected(inDim::Int, outDim::Int, σ::Function = identity; initW::Function = glorot_uniform, initb::Function = zeros)
+    return Connected(param(initW(outDim, inDim)), param(initb(outDim)), σ)
 end
 
 # This I believe enables all the things param() has
@@ -42,19 +42,35 @@ h = myLayer(x) # performs Wx + b
 
 Performs forward propagation on the input array `x`.
 """
-(l::Connected)(x::AbstractArray) = l.σ.(l.W * x .+ l.b)
+function (l::Connected)(x::AbstractArray)
+    W, b, σ = l.W, l.b, l.σ
+    return σ.(W*x .+ b)
+end
 
+# Try to avoid hitting generic matmul in some simple cases
+# Base's matmul is so slow that it's worth the extra conversion to hit BLAS
+(a::Connected{<:Any,W})(x::AbstractArray{T}) where {T <: Union{Float32,Float64}, W <: AbstractArray{T}} =
+  invoke(a, Tuple{AbstractArray}, x)
+
+(a::Connected{<:Any,W})(x::AbstractArray{<:Real}) where {T <: Union{Float32,Float64}, W <: AbstractArray{T}} =
+  a(T.(x))
+
+"""Helper function used by Convolution constructor(s)."""
 function makeConvMat(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, init::Function)
     W = param(init(filter, filter, inCh, outCh))
     numColSteps = xWidth - filter + 1
     numRowSteps = xHeight - filter + 1
+    # We initialize convMat to be of type Any so it can hold both floats untracked
+    # by Flux's automatic differentiator AND the weights that are. Maybe this is
+    # part of the problem.
     convMat = Array{Any}(undef, numColSteps*numRowSteps, xWidth*xHeight, inCh, outCh)
+    # fill with untracked zeros (we want those to stay as 0's throughout learning.)
     convMat[:] = zeros(size(convMat)...)
     convMatⱼ = 0
     for inChᵢ in 1:inCh, outChᵢ in 1:outCh
         for convMatᵢ in 1:size(convMat)[1]
             # Add a row to (convMat), the convolution transpose matrix
-            # which will contain the weights (W) within it.
+            # which will contain the tracked weights (W) within it.
             convMatⱼ = Int(floor((convMatᵢ-1) / numColSteps) * xWidth) + (convMatᵢ-1) % numRowSteps + 1
             for Wᵢ in 1:filter
                 # Insert row Wᵢ of W into row convMatᵢ of convMat at the proper place.
@@ -74,17 +90,15 @@ struct Convolution{F,A,V}
     filterDim::Int
     inCh::Int
     outCh::Int
-    xWidth::Int
-    xHeight::Int
 end
 
-function Convolution(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
+function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = glorot_uniform)
     # Weights will have dimensions (filter x filter x inCh x outCh)
     # i.e. there is a filter of weights for each input channel of each feature map.
     # Each feature map only has one bias weight.
-    W = makeConvMat(filter, inCh, outCh, xWidth, xHeight, init)
+    W = param(init(filter, filter, inCh, outCh))
     b = param(zeros(outCh))
-    return Convolution(W, b, σ, filter, inCh, outCh, xWidth, xHeight) 
+    return Convolution(W, b, σ, filter, inCh, outCh) 
 end
 
 Flux.@treelike Convolution
@@ -94,23 +108,22 @@ Performs forward convolution on the input array `x`. `x` should be
 in the HWCN (height-width-channels-batchsize) format.
 """
 function (c::Convolution)(x::AbstractArray)
-    if size(x)[1] != c.xHeight
-        throw(ArgumentError("Incoming array `x` must have $(c.xHeight) rows, not $(size(x)[1])"))
-    elseif size(x)[2] != c.xWidth
-        throw(ArgumentError("Incoming array `x` must have $(c.xWidth) columns, not $(size(x)[2])"))
-    end
-
-    batchSize = size(x)[4]
-    # flatten each channel into a vector
-    flatX = reshape(x, size(x)[1] * size(x)[2], size(x)[3], batchSize)
     # Initialize the pre-activated feature map values
-    net = Array{Any}(undef, c.xHeight - c.filterDim + 1, c.xWidth - c.filterDim + 1, c.outCh, batchSize)
+    xDimRows, xDimCols, _, batchSize = size(x)
+    net = TrackedArray(zeros(Float32, xDimRows - c.filterDim + 1, xDimCols - c.filterDim + 1, c.outCh, batchSize))
     # Compute the nets
+    numRowSteps, numColSteps = size(net)[1:2]
     for batchᵢ in 1:batchSize, featMap in 1:c.outCh
-        # Calculate and sum the nets across all input channels
-        chNets = sum(c.W[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
+        # convolve over the input matrix to get
+        # this feature map
+        for netⱼ in 1:numColSteps, netᵢ in 1:numRowSteps
+            xRows = netᵢ:(netᵢ + c.filterDim - 1)
+            xCols = netⱼ:(netⱼ + c.filterDim - 1)
+            chProducts = sum(sum(x[xRows,xCols, channel, batchᵢ] .* c.W[:, :, channel, featMap]) for channel in 1:c.inCh)
+            net.data[netᵢ, netⱼ, featMap, batchᵢ] = chProducts
+        end
         # Add the bias
-        net[:, :, featMap, batchᵢ] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
+        net.data[:,:,featMap,batchᵢ] .+ c.b[featMap]
     end
     # Activate
     return c.σ.(net)
@@ -124,23 +137,20 @@ struct ConvolutionTranspose{F,A,V}
     filterDim::Int
     inCh::Int
     outCh::Int
-    xWidth::Int
-    xHeight::Int
+    xWidth::Int # dim 2 (columns) of incoming `x`
+    xHeight::Int # dim 1 (rows) of incoming `x`
 end
 
 function ConvolutionTranspose(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
-    # Final convolution transpose matrix (W) will have dimensions
-    # (filter^2 x elementsInX x inCh x outCh).
-    # Each feature map only has one bias weight.
-    b = param(zeros(outCh))
-    # We initialize W to be of type Any so it can hold both floats untracked
-    # by Flux's automatic differentiator AND the weights that are.
     W = makeConvMat(filter, inCh, outCh, xWidth, xHeight, init)
-    W = permutedims(W, [2,1,3,4])
+    W = permutedims(W, [2,1,3,4]) # Permute the convolution matrix to get the convolution transpose
+    # Per norm, each feature map only has one bias weight.
+    b = param(zeros(outCh))
     return ConvolutionTranspose(W, b, σ, filter, inCh, outCh, xWidth, xHeight) 
 end
 
-Flux.@treelike ConvolutionTranspose
+Flux.children(l::ConvolutionTranspose) = (l.W, l.b)
+Flux.mapchildren(f, l::ConvolutionTranspose) = map(f, (l.W, l.b))
 
 """
 Performs forward convolution transpose on the input array
@@ -163,7 +173,7 @@ function (c::ConvolutionTranspose)(x::AbstractArray)
     for batchᵢ in 1:batchSize, featMap in 1:c.outCh
         # Calculate and sum the nets across all input channels
         chNets = sum(c.W[:, :, ch, featMap] * flatX[:, ch, batchᵢ] for ch in 1:c.inCh)
-        # Add the bias
+        # Add the bias and store in net
         net[:, :, featMap, batchᵢ] = reshape(chNets, size(net)[1], size(net)[2]) .+ c.b[featMap]
     end
     # Activate
