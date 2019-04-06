@@ -4,3 +4,4 @@ scratch.jl
 *.jpeg
 *.jpg
 !*fullarray.png
+wgan_tf
