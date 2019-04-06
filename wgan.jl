@@ -175,7 +175,7 @@ criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = -500, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5, numSamplesToSave = 40)
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5, numSamplesToSave = 40,imageSize = 28)
     @info("Beginning training function...")
     modelStats = LearningStats()
     optCritic = RMSProp(wgan.α)
@@ -203,7 +203,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
         mkpath("images/$modelName/image_epoch_$(epoch_idx)/")
         for i = 1:numSamplesToSave
-            save("images/$modelName/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
+            save("images/$modelName/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), imageSize, imageSize)))
         end
         # If our loss is good enough, quit out.
         if targetLoss >= loss
