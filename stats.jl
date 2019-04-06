@@ -23,6 +23,22 @@ function plotLearningStats(stats::LearningStats, name::String, isClassification:
     savefig(plt, "$(name).png");
 end
 
-export LearningStats, plotLearningStats
+function plotCompareModels(stats::Array{LearningStats}, modelNames::Array{String},
+    plotName::String = "model-comparison"
+)
+    plottables, labels = [], []
+    for stat in stats push!(plottables, stat.trainLoss, stat.valAcc) end
+    for name in modelNames push!(labels, "$(name) Train Loss", "$(name) Val. Accuracy") end
+
+    plt = plot(
+        1:length(stats[1].trainLoss),
+        hcat(plottables...),
+        label = labels, linecolor = [:red :blue :red :blue], linestyle = [:solid :solid :dot :dot],
+        xlabel = "Epochs", ylabel =  "Loss/Accuracy"
+    )
+    savefig(plt, "$(plotName).png");
+end
+
+export LearningStats, plotLearningStats, plotCompareModels
 
 end # module stats
