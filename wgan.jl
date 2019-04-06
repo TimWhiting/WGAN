@@ -41,61 +41,6 @@ function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32
     return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
 end
 
-function DCGANCritic()
-    model = Chain(x->reshape(x, 28, 28, 1, :),
-        Conv((3, 3), 1 => 16, pad = (1, 1)),
-        BatchNorm(16, relu),
-        x->maxpool(x, (2, 2)),
-
-        # Second convolution, operating upon a 14x14 image
-        Conv((3, 3), 16 => 32, pad = (1, 1)),
-        BatchNorm(32, relu),
-        x->maxpool(x, (2, 2)),
-
-        # Third convolution, operating upon a 7x7 image
-        Conv((3, 3), 32 => 32, pad = (1, 1)),
-        BatchNorm(32, relu),
-        x->maxpool(x, (2, 2)),
-
-        # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
-        # which is where we get the 288 in the `Dense` layer below:
-        x->reshape(x, :, size(x, 4)),
-        Dense(288, 1),
-    )
-    return DCGANCritic(model)
-end
-
-function DCGANGenerator()
-    model = Chain(Dense(100, 288),
-        x->reshape(x, 3, 3, 32, :),
-        ConvTranspose((3, 3), 32 => 32),
-        BatchNorm(32, relu),
-
-        # Second convolution, operating upon a 14x14 image
-        ConvTranspose((3, 3), 32 => 16),
-        BatchNorm(16, relu),
-
-        # Third convolution, operating upon a 7x7 image
-        ConvTranspose((3, 3), 16 => 1, σ),
-    )
-    return DCGANGenerator(model)
-end
-
-
-
-function MLPCritic()
-    model = Chain(x->reshape(x, 28^2, :),
-        Dense(28^2, 128, relu),
-        Dense(128, 1))
-    return MLPCritic(model)
-end
-
-function MLPGenerator()
-    model = Chain(Dense(10, 128, relu),
-        Dense(128, 28^2, σ),
-        x->reshape(x, 28, 28, :))
-    return MLPGenerator(model)
-end
 
 struct WGAN
     α::Float32 # Learning Rate
@@ -108,17 +53,8 @@ struct WGAN
     callback::Function
 end
 
-# TODO: Make default parameters good
-function WGAN(;learningRate = Float32(.0001),clippingParam =  Float32(.01), batchSize = 32, generatorInputSize = 10, nCriticIterationsPerGeneratorIteration = 5, dcganCritic = false, dcganGenerator = false)
-    if dcganCritic
-        if dcganGenerator
-            return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), DCGANGenerator(), ()->())
-        else
-            return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, DCGANCritic(), MLPGenerator(), ()->())
-        end
-    else
-        return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, MLPCritic(), MLPGenerator(), ()->())
-    end
+function WGAN(critic, generator; learningRate = Float32(.0001), clippingParam =  Float32(.01), batchSize = 32, generatorInputSize = 10, nCriticIterationsPerGeneratorIteration = 5)
+    return WGAN(learningRate, clippingParam, batchSize, generatorInputSize, nCriticIterationsPerGeneratorIteration, critic, generator, ()->())
 end
 
 
@@ -239,19 +175,21 @@ criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2
 
 function trainWGAN(wgan::WGAN, trainSet, valSet;
     epochs = 100, targetLoss = -500, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5)
+    patience = 10, minLr = 1e-6, lrDropThreshold = 5, numSamplesToSave = 40)
     @info("Beginning training function...")
     modelStats = LearningStats()
     optCritic = RMSProp(wgan.α)
     optGenerator = RMSProp(wgan.α)
-    mkpath("images/mnist_mlp/")
-    save("images/mnist_mlp/image_epoch_sample.png", colorview(Gray, reshape(trainSet[1], 28, 28, 1, :)[:,:,:,1]))
+    mkpath("images/$modelName/")
+    #save("images/$modelName/image_epoch_sample.png", colorview(Gray, reshape(trainSet[1], 28, 28, 1, :)[:,:,:,1]))
+
+
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
     last_improvement = 0
+
     for epoch_idx in 1:epochs
         # Train for a single epoch
-        
         #gpu(wgan.critic.model)
         #gpu(wgan.generator.model)
         #gpu.(trainSet)
@@ -263,10 +201,9 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
-        images = wgan.generator.model(randu((wgan.n, 40)))
-        mkpath("images/mnist_mlp/image_epoch_$(epoch_idx)/")
-        for i = 1:40
-            save("images/mnist_mlp/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
+        mkpath("images/$modelName/image_epoch_$(epoch_idx)/")
+        for i = 1:numSamplesToSave
+            save("images/$modelName/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), 28, 28)))
         end
         # If our loss is good enough, quit out.
         if targetLoss >= loss
@@ -276,7 +213,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
 
         # If this is the best loss we've seen so far, save the model out
         if best_loss >= loss
-            @info(" -> New best loss! Saving models out to $(modelName)_critic/generator-timestamp.bson")
+            @info(" -> New best loss! Saving models out to $(modelName)_critic-generator-timestamp.bson")
             #TODO: Figure out saving models -- not working right now
             #critic = wgan.critic.model
             #generator = wgan.generator.model
@@ -286,14 +223,6 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
             modelStats.bestValAcc = best_loss
             last_improvement = epoch_idx
         end
-
-        # If we haven't seen improvement in lrDropThreshold epochs, drop our learning rate:
-        #if epoch_idx - last_improvement >= lrDropThreshold && opt.eta > minLr
-            #opt.eta /= 10.0
-            #@warn(" -> Haven't improved in a while, dropping learning rate to $(opt.eta)!")
-            # After dropping learning rate, give it a few epochs to improve
-            #last_improvement = epoch_idx
-        #end
 
         #if epoch_idx - last_improvement >= patience
         #    @warn(" -> We're calling this converged.")
