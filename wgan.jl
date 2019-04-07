@@ -211,13 +211,14 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
             break
         end
 
+        @save "$(modelName)_wgan-$epoch_idx-$loss.bson" wgan
         # If this is the best loss we've seen so far, save the model out
         if best_loss >= loss
             @info(" -> New best loss! Saving models out to $(modelName)_critic-generator-timestamp.bson")
             #TODO: Figure out saving models -- not working right now
             #critic = wgan.critic.model
             #generator = wgan.generator.model
-            #@save "$(modelName)_critic-$(now()).bson" critic epoch_idx loss
+
             #@save "$(modelName)_generator-$(now()).bson" generator epoch_idx loss
             best_loss = loss
             modelStats.bestValAcc = best_loss
