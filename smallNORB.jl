@@ -118,7 +118,7 @@ function trainsNORBMLP()
     # Prepare test set as one giant minibatch:
 
     @info("Constructing model...")
-    wgan = WGAN(MLPCritic(), MLPGenerator())
+    wgan = WGAN(MLPCritic(), MLPGenerator(), generatorInputSize = 100)
    
     trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_large", numSamplesToSave = 40, imageSize = norbImgSize)
 
