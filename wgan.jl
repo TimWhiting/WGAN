@@ -180,9 +180,8 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     modelStats = LearningStats()
     optCritic = RMSProp(wgan.α)
     optGenerator = RMSProp(wgan.α)
-    mkpath("images/$modelName/")
-    #save("images/$modelName/image_epoch_sample.png", colorview(Gray, reshape(trainSet[1], 28, 28, 1, :)[:,:,:,1]))
-
+    mkpath("$modelName/images")
+    mkpath("$modelName")
 
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
@@ -193,17 +192,18 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         #gpu(wgan.critic.model)
         #gpu(wgan.generator.model)
         #gpu.(trainSet)
-
+       
         train!(generatorLoss, criticLoss, wgan, trainSet, optGenerator, optCritic; cb = wgan.callback)
     
         # Calculate loss:
         loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
         gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
+        @save "$modelName/checkpoints/wgan-$epoch_idx-$loss-$gLoss.bson" wgan
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
-        mkpath("images/$modelName/image_epoch_$(epoch_idx)/")
+        mkpath("$modelName/images/epoch_$(epoch_idx)/")
         for i = 1:numSamplesToSave
-            save("images/$modelName/image_epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), imageSize, imageSize)))
+            save("$modelName/images/epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), imageSize, imageSize)))
         end
         # If our loss is good enough, quit out.
         if targetLoss >= loss
@@ -211,7 +211,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
             break
         end
 
-        @save "$(modelName)_wgan-$epoch_idx-$loss.bson" wgan
+        
         # If this is the best loss we've seen so far, save the model out
         if best_loss >= loss
             @info(" -> New best loss! Saving models out to $(modelName)_critic-generator-timestamp.bson")

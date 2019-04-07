@@ -12,7 +12,7 @@ norbImgSize = 96
 function getsNORBImages()
     numTrainImages = 0
     imagePaths = Array{String}(undef, 0)
-    for (root, dirs, files) in walkdir("./smallnorb_export/train/")
+    for (root, dirs, files) in walkdir("./small_norb/smallnorb_export/train/")
         #println("Files in $root")
         for file in files
             push!(imagePaths, joinpath(root, file))
@@ -115,7 +115,7 @@ function trainsNORBMLP()
     @info("Constructing model...")
     wgan = WGAN(MLPCritic(), MLPGenerator())
    
-    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp", numSamplesToSave = 40, imageSize = norbImgSize)
+    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_large", numSamplesToSave = 40, imageSize = norbImgSize)
 
 end
 
