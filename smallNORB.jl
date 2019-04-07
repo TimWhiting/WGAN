@@ -7,15 +7,20 @@ using wgan: WGAN, trainWGAN, DCGANCritic, DCGANGenerator, MLPCritic, MLPGenerato
 using FileIO, Images
 
 
+
 norbImgSize = 96
 
-function getsNORBImages()
+function getsNORBImages(maxImages = 10000000)
     numTrainImages = 0
     imagePaths = Array{String}(undef, 0)
     for (root, dirs, files) in walkdir("./small_norb/smallnorb_export/train/")
         #println("Files in $root")
         for file in files
             push!(imagePaths, joinpath(root, file))
+            numTrainImages += 1
+            if numTrainImages == maxImages
+                break
+            end
             #println(joinpath(root, file)) # path to files
         end
     end
@@ -88,14 +93,14 @@ end
 
 function MLPCritic()
     model = Chain(x->reshape(x, norbImgSize^2, :),
-        Dense(norbImgSize^2, 128, relu),
-        Dense(128, 1))
+        Dense(norbImgSize^2, 1000, relu),
+        Dense(1000, 1))
     return MLPCritic(model)
 end
 
-function MLPGenerator(;generatorInputSize = 10)
-    model = Chain(Dense(generatorInputSize, 128, relu),
-        Dense(128, norbImgSize^2, σ),
+function MLPGenerator(;generatorInputSize = 100)
+    model = Chain(Dense(generatorInputSize, 1000, relu),
+        Dense(1000, norbImgSize^2, σ),
         x->reshape(x, norbImgSize, norbImgSize, :))
     return MLPGenerator(model)
 end

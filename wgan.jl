@@ -4,14 +4,14 @@ using Flux.Data.MNIST, Statistics
 using Flux
 using Base.Iterators: repeated, partition
 using Printf
-using BSON: @save
+using BSON
 using learn
 using stats
 using Statistics
 using Images
 using Dates: now
 using NNlib: relu, σ
-import Flux.Tracker: Params, gradient, data, update!
+import Flux.Tracker: Params, gradient, data, update!, tracker
 
 const ϵ = 1e-8
 
@@ -67,8 +67,6 @@ struct StopException <: Exception end
 call(f, xs...) = f(xs...)
 runall(f) = f
 runall(fs::AbstractVector) = ()->foreach(call, fs)
-data(x::TrackedArray) = x.data
-tracker(x::TrackedArray) = x.tracker
 
 function update_clip!(x::TrackedArray, Δ; c = .01)
     x.data .+= data(Δ)
@@ -181,8 +179,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     optCritic = RMSProp(wgan.α)
     optGenerator = RMSProp(wgan.α)
     mkpath("$modelName/images")
-    mkpath("$modelName")
-
+    mkpath("$modelName/checkpoints")
     @info("Beginning training loop...")
     best_loss = 10000000000000000000000000000.0
     last_improvement = 0
@@ -192,13 +189,22 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         #gpu(wgan.critic.model)
         #gpu(wgan.generator.model)
         #gpu.(trainSet)
-       
-        train!(generatorLoss, criticLoss, wgan, trainSet, optGenerator, optCritic; cb = wgan.callback)
-    
-        # Calculate loss:
-        loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
-        gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
-        @save "$modelName/checkpoints/wgan-$epoch_idx-$loss-$gLoss.bson" wgan
+        if isfile("$modelName/checkpoints/wgan-$epoch_idx.bson")
+            BSON.@load "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator
+            Flux.loadparams!(wgan.critic.model, weightsCritic)
+            Flux.loadparams!(wgan.generator.model, weightsGenerator)
+            loss = 0
+            gLoss = 0
+        else
+            train!(generatorLoss, criticLoss, wgan, trainSet, optGenerator, optCritic; cb = wgan.callback)
+            # Calculate loss:
+            loss = criticLoss(wgan.critic, wgan.generator, trainSet[1], randu((wgan.n, wgan.m)))
+            gLoss = generatorLoss(wgan.critic, wgan.generator, randu((wgan.n, wgan.m)))
+            weightsGenerator = Tracker.data.(Params(params(wgan.generator.model)))
+            weightsCritic = Tracker.data.(Params(params(wgan.critic.model)))
+            BSON.@save "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator 
+        end
+        
         push!(modelStats.valAcc, loss)
         @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
         mkpath("$modelName/images/epoch_$(epoch_idx)/")
@@ -214,12 +220,6 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
         
         # If this is the best loss we've seen so far, save the model out
         if best_loss >= loss
-            @info(" -> New best loss! Saving models out to $(modelName)_critic-generator-timestamp.bson")
-            #TODO: Figure out saving models -- not working right now
-            #critic = wgan.critic.model
-            #generator = wgan.generator.model
-
-            #@save "$(modelName)_generator-$(now()).bson" generator epoch_idx loss
             best_loss = loss
             modelStats.bestValAcc = best_loss
             last_improvement = epoch_idx
