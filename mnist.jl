@@ -84,7 +84,7 @@ function DCGANCritic2()
 end
 
 function DCGANGenerator2(;generatorInputSize = 100)
-    model = Chain(Dense(generatorInputSize, 1028, relu),
+    model = Chain(Dense(generatorInputSize, 1024, relu),
         BatchNorm(1024),
         x->reshape(x, 7, 7, 128, :),
 
