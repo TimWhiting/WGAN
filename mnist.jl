@@ -57,7 +57,7 @@ function DCGANGenerator(;generatorInputSize = 10)
 
         # Second convolution, operating upon a 14x14 image
         ConvTranspose((2, 2), 32 => 32, stride = (2, 2), pad = (1, 1)),
-        BatchNorm(16, relu),
+        BatchNorm(32, relu),
 
         # Third convolution, operating upon a 7x7 image
         ConvTranspose((2, 2), 32 => 1, σ, stride = (2, 2), pad = (1, 1)),
