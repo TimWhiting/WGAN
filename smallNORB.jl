@@ -5,7 +5,7 @@ using Flux
 
 using wgan: WGAN, trainWGAN, DCGANCritic, DCGANGenerator, MLPCritic, MLPGenerator
 using FileIO, Images
-using CuArrays
+# using CuArrays
 
 
 
@@ -25,7 +25,7 @@ function getsNORBImages(maxImages = 10000000)
             #println(joinpath(root, file)) # path to files
         end
     end
-    print(imagePaths[1])
+    @info("Example image path: $(imagePaths[1])...")
     return [load(imgPath) for imgPath in imagePaths]
 end
 
@@ -69,8 +69,7 @@ function DCGANCritic(useGPU::Bool = false)
         # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
         # which is where we get the 288 in the `Dense` layer below:
         x->reshape(x, :, size(x, 4)),
-        x -> println("new x == $(size(x))"),
-        Dense(288, 1),
+        Dense(800, 1),
     )
     return DCGANCritic(model, useGPU)
 end
@@ -113,7 +112,7 @@ end
 function trainsNORBMLP()
 
     # Load labels and images from Flux.Data.sNORB
-    @info("Loading data set")
+    @info("Loading data set...")
     train_imgs = getsNORBImages()
 
     batch_size = 32
@@ -129,7 +128,7 @@ function trainsNORBMLP()
 
 end
 
-function trainsNORBMLPCriticDCGANCritic(; useGPU = false)
+function trainsNORBMLPGeneratorDCGANCritic(; useGPU = false)
 
     # Load labels and images from Flux.Data.sNORB
     @info("Loading data set")
@@ -141,7 +140,7 @@ function trainsNORBMLPCriticDCGANCritic(; useGPU = false)
 
     generatorInputSize = 50
     @info("Constructing model...")
-    wgan = WGAN(DCGANCritic(useGPU), MLPGenerator(useGPU, generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+    wgan = WGAN(DCGANCritic(useGPU), MLPGenerator(useGPU, generatorInputSize = generatorInputSize), generatorInputSize = generatorInputSize, batchSize = batch_size)
     
     if (useGPU) train_set = gpu.(train_set) end
 
@@ -149,7 +148,7 @@ function trainsNORBMLPCriticDCGANCritic(; useGPU = false)
 
 end
 #getsNORBImages()
-trainsNORBMLP()
-#trainsNORBMLPCriticDCGANCritic()
+#trainsNORBMLP()
+trainsNORBMLPGeneratorDCGANCritic()
 
 end # module smallNORB

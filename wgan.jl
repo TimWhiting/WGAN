@@ -40,9 +40,9 @@ end
 
 function MLPGenerator(model, useGPU::Bool)
     if useGPU
-        return DCGANCritic(gpu(model))
+        return MLPGenerator(gpu(model))
     else
-        return DCGANCritic(model)
+        return MLPGenerator(model)
     end
 end
 
