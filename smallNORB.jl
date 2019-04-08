@@ -5,6 +5,7 @@ using Flux
 
 using wgan: WGAN, trainWGAN, DCGANCritic, DCGANGenerator, MLPCritic, MLPGenerator
 using FileIO, Images
+using CuArrays
 
 
 
@@ -49,28 +50,29 @@ end
 end
 
 
-function DCGANCritic()
+function DCGANCritic(useGPU::Bool = false)
     model = Chain(x->reshape(x, norbImgSize, norbImgSize, 1, :),
-        Conv((3, 3), 1 => 16, pad = (1, 1)),
+        Conv((3, 3), 1 => 16, stride = 2),
         BatchNorm(16, relu),
-        x->maxpool(x, (2, 2)),
 
         # Second convolution, operating upon a 14x14 image
-        Conv((3, 3), 16 => 32, pad = (1, 1)),
+        Conv((3, 3), 16 => 32, stride = 2),
         BatchNorm(32, relu),
-        x->maxpool(x, (2, 2)),
 
         # Third convolution, operating upon a 7x7 image
-        Conv((3, 3), 32 => 32, pad = (1, 1)),
+        Conv((3, 3), 32 => 32, stride = 2),
         BatchNorm(32, relu),
-        x->maxpool(x, (2, 2)),
+
+        Conv((3, 3), 32 => 32, stride = 2),
+        BatchNorm(32, relu),
 
         # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
         # which is where we get the 288 in the `Dense` layer below:
         x->reshape(x, :, size(x, 4)),
+        x -> println("new x == $(size(x))"),
         Dense(288, 1),
     )
-    return DCGANCritic(model)
+    return DCGANCritic(model, useGPU)
 end
 
 function DCGANGenerator(;generatorInputSize = 10)
@@ -98,11 +100,14 @@ function MLPCritic()
     return MLPCritic(model)
 end
 
-function MLPGenerator(;generatorInputSize = 100)
-    model = Chain(Dense(generatorInputSize, 264, relu),
-        Dense(264, norbImgSize^2, σ),
+function MLPGenerator(useGPU::Bool = false; generatorInputSize = 100)
+    model = Chain(
+        Dense(generatorInputSize, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, 512, relu),
+        Dense(512, norbImgSize^2, σ),
         x->reshape(x, norbImgSize, norbImgSize, :))
-    return MLPGenerator(model)
+    return MLPGenerator(model, useGPU)
 end
 
 function trainsNORBMLP()
@@ -124,7 +129,7 @@ function trainsNORBMLP()
 
 end
 
-function trainsNORBMLPCriticDCGANCritic()
+function trainsNORBMLPCriticDCGANCritic(; useGPU = false)
 
     # Load labels and images from Flux.Data.sNORB
     @info("Loading data set")
@@ -134,17 +139,17 @@ function trainsNORBMLPCriticDCGANCritic()
     mb_idxs = partition(1:length(train_imgs), batch_size)
     train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
 
-    # Prepare test set as one giant minibatch:
-
-    generatorInputSize = 20
+    generatorInputSize = 50
     @info("Constructing model...")
-    wgan = WGAN(DCGANCritic(), MLPGenerator(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
-   
+    wgan = WGAN(DCGANCritic(useGPU), MLPGenerator(useGPU, generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+    
+    if (useGPU) train_set = gpu.(train_set) end
+
     trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan", numSamplesToSave = 40, imageSize = norbImgSize)
 
 end
 #getsNORBImages()
-    trainsNORBMLP()
+trainsNORBMLP()
 #trainsNORBMLPCriticDCGANCritic()
 
 end # module smallNORB
