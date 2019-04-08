@@ -93,14 +93,14 @@ end
 
 function MLPCritic()
     model = Chain(x->reshape(x, norbImgSize^2, :),
-        Dense(norbImgSize^2, 1000, relu),
-        Dense(1000, 1))
+        Dense(norbImgSize^2, 264, relu),
+        Dense(264, 1))
     return MLPCritic(model)
 end
 
 function MLPGenerator(;generatorInputSize = 100)
-    model = Chain(Dense(generatorInputSize, 1000, relu),
-        Dense(1000, norbImgSize^2, σ),
+    model = Chain(Dense(generatorInputSize, 264, relu),
+        Dense(264, norbImgSize^2, σ),
         x->reshape(x, norbImgSize, norbImgSize, :))
     return MLPGenerator(model)
 end

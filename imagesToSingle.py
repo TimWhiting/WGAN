@@ -1,10 +1,10 @@
 import numpy as np
 import glob
 from PIL import Image
-initialPath = "./images/sNORB_mlp/"
+initialPath = "./mnist_mlp_dcgan/images/"
 
 for k in range(1, 101):
-    imageFolderPath = initialPath + "image_epoch_{}/".format(k)
+    imageFolderPath = initialPath + "epoch_{}".format(k)
     print(imageFolderPath)
     list_im = glob.glob(imageFolderPath + '/image_*.png')
     imgs = [Image.open(i) for i in list_im]
@@ -21,4 +21,4 @@ for k in range(1, 101):
 
     # save that beautiful picture
     imgs_comb = Image.fromarray(prevRows)
-    imgs_comb.save(initialPath + "image_epoch_{}/fullarray.png".format(k))
+    imgs_comb.save(initialPath + "epoch_{}/fullarray.png".format(k))

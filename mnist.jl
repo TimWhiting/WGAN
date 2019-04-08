@@ -81,6 +81,13 @@ function MLPGenerator(;generatorInputSize = 10)
     return MLPGenerator(model)
 end
 
+function MLPGenerator2(;generatorInputSize = 10)
+    model = Chain(Dense(generatorInputSize, 256, relu),
+        Dense(256, 28^2, σ),
+        x->reshape(x, 28, 28, :))
+    return MLPGenerator(model)
+end
+
 function trainMNISTMLP()
 
     # Load labels and images from Flux.Data.MNIST
@@ -117,7 +124,7 @@ function trainMNISTMLPCriticDCGANCritic()
     test_set = make_minibatch_mlp(test_imgs, 1:length(test_imgs))
     generatorInputSize = 20
     @info("Constructing model...")
-    wgan = WGAN(DCGANCritic(), MLPGenerator(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+    wgan = WGAN(DCGANCritic(), MLPGenerator2(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
    
     trainWGAN(wgan, train_set, test_set; modelName = "mnist_mlp_dcgan", numSamplesToSave = 40)
 
