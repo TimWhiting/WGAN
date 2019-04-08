@@ -56,11 +56,11 @@ function DCGANGenerator(;generatorInputSize = 10)
         BatchNorm(32, relu),
 
         # Second convolution, operating upon a 14x14 image
-        ConvTranspose((2, 2), 32 => 16, stride = (2, 2), pad = (1, 1), dilation = 1),
+        ConvTranspose((2, 2), 32 => 32, stride = (2, 2), pad = (1, 1)),
         BatchNorm(16, relu),
 
         # Third convolution, operating upon a 7x7 image
-        ConvTranspose((2, 2), 16 => 1, σ, stride = (2, 2), pad = (1, 1), dilation = 1),
+        ConvTranspose((2, 2), 32 => 1, σ, stride = (2, 2), pad = (1, 1)),
         x->reshape(x, 28, 28, :))
     return DCGANGenerator(model)
 end
