@@ -84,8 +84,8 @@ function DCGANCritic2()
 end
 
 function DCGANGenerator2(;generatorInputSize = 100)
-    model = Chain(Dense(generatorInputSize, 1024, relu),
-        BatchNorm(1024),
+    model = Chain(Dense(generatorInputSize, 128 * 7 * 7, relu),
+        BatchNorm(128 * 7 * 7),
         x->reshape(x, 7, 7, 128, :),
 
         # Second convolution, operating upon a 14x14 image
