@@ -52,15 +52,15 @@ end
 function DCGANGenerator(;generatorInputSize = 10)
     model = Chain(Dense(generatorInputSize, 288),
         x->reshape(x, 3, 3, 32, :),
-        ConvTranspose((3, 3), 32 => 32, pad = (1, 1), dilation = 1),
+        ConvTranspose((2, 2), 32 => 32, pad = (1, 1), dilation = 1),
         BatchNorm(32, relu),
 
         # Second convolution, operating upon a 14x14 image
-        ConvTranspose((3, 3), 32 => 16, pad = (1, 1), dilation = 1),
+        ConvTranspose((2, 2), 32 => 16, pad = (1, 1), dilation = 1),
         BatchNorm(16, relu),
 
         # Third convolution, operating upon a 7x7 image
-        ConvTranspose((3, 3), 16 => 1, σ, pad = (1, 1), dilation = 1),
+        ConvTranspose((2, 2), 16 => 1, σ, pad = (1, 1), dilation = 1),
         x->reshape(x, 28, 28, :))
     return DCGANGenerator(model)
 end
