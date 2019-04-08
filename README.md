@@ -6,8 +6,16 @@ An implementation of a Wasserstein Generative Adversarial Network (WGAN) in Juli
 
 ## Dependencies
 
-Needed dependencies for running the project locally: `Flux`. If running on GPU with your local machine, also include: `CuArrays`.
-Also needs: `Images`, and `ImageMagick` and `NNlib`, `BSON`
+Needed dependencies for running the project locally (run this from the Julia REPL):
+
+```julia
+import Pkg; Pkg.add.(["Flux", "Images", "ImageMagick", "NNlib", "BSON", "Plots", "Juno", "FileIO"])
+```
+If running on GPU with your local machine, also include:
+
+```julia
+import Pkg; Pkg.add.(["CuArrays"])
+```
 
 ## Leveraging TPU
 
@@ -25,5 +33,5 @@ Follow the instructions in the repository to convert all of the files to images
 - Implement Experiment(s), Options:
   - Bidirectional latent encoder
   - Coordinate convolutions
-  - Anything else cool!
   - Validate on a hold-out set from the same distribution as the train set
+  - Anything else cool!
