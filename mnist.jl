@@ -55,15 +55,15 @@ function DCGANGenerator(;generatorInputSize = 10)
         Dense(288, 288 * 2, relu),
         BatchNorm(288 * 2),
         x->reshape(x, 3, 3, 64, :),
-        ConvTranspose((2, 2), 64 => 64, stride = (3, 3), pad = (1, 1)),
+        ConvTranspose((2, 2), 64 => 64, stride = (2, 2), pad = (2, 2)),
         BatchNorm(64, relu),
 
         # Second convolution, operating upon a 14x14 image
-        ConvTranspose((2, 2), 64 => 32, stride = (2, 2), pad = (1, 1)),
+        ConvTranspose((2, 2), 64 => 32, stride = (2, 2), pad = (2, 2)),
         BatchNorm(32, relu),
 
         # Third convolution, operating upon a 7x7 image
-        ConvTranspose((2, 2), 32 => 1, σ, stride = (2, 2), pad = (1, 1)),
+        ConvTranspose((2, 2), 32 => 1, σ, stride = (2, 2), pad = (2, 2)),
         x->reshape(x, 28, 28, :))
     return DCGANGenerator(model)
 end
