@@ -50,13 +50,11 @@ function DCGANCritic()
 end
 
 function DCGANGenerator(;generatorInputSize = 10)
-    model = Chain(Dense(generatorInputSize, 288),
-        BatchNorm(288, relu),
-        Dense(288, 288 * 2),
-        BatchNorm(288 * 2, relu),
+    model = Chain(Dense(generatorInputSize, 288, relu),
+        BatchNorm(288),
+        Dense(288, 288 * 2, relu),
+        BatchNorm(288 * 2),
         x->reshape(x, 3, 3, 64, :),
-        ConvTranspose((2, 2), 64 => 64, stride = (2, 2), pad = (1, 1)),
-        BatchNorm(64, relu),
 
         # Second convolution, operating upon a 14x14 image
         ConvTranspose((2, 2), 64 => 32, stride = (2, 2), pad = (1, 1)),
