@@ -66,12 +66,12 @@ end
 
 function DCGANCritic2()
     model = Chain(x->reshape(x, 28, 28, 1, :),
-        Conv((5, 5), 1 => 32, pad = (1, 1)),
+        Conv((5, 5), 1 => 32),
         BatchNorm(32, relu),
         x->maxpool(x, (2, 2)),
 
         # Second convolution, operating upon a 14x14 image
-        Conv((5, 5), 32 => 64, pad = (1, 1)),
+        Conv((5, 5), 32 => 64),
         BatchNorm(64, relu),
         x->maxpool(x, (2, 2)),
 
