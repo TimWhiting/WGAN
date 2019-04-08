@@ -129,8 +129,27 @@ function trainMNISTMLPCriticDCGANCritic()
     trainWGAN(wgan, train_set, test_set; modelName = "mnist_mlp_dcgan", numSamplesToSave = 40)
 
 end
+function trainMNISTDCGAN()
 
+    # Load labels and images from Flux.Data.MNIST
+    @info("Loading data set")
+    train_imgs = MNIST.images()
+
+    batch_size = 32
+    mb_idxs = partition(1:length(train_imgs), batch_size)
+    train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
+
+    # Prepare test set as one giant minibatch:
+    test_imgs = MNIST.images(:test)
+    test_set = make_minibatch_mlp(test_imgs, 1:length(test_imgs))
+    generatorInputSize = 20
+    @info("Constructing model...")
+    wgan = WGAN(DCGANCritic(), DCGANGenerator(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+   
+    trainWGAN(wgan, train_set, test_set; modelName = "mnist_mlp_dcgan", numSamplesToSave = 40)
+
+end
 #trainMNISTMLP()
-trainMNISTMLPCriticDCGANCritic()
-
+#trainMNISTMLPCriticDCGANCritic()
+trainMNISTDCGAN()
 end # module main
