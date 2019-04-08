@@ -26,8 +26,24 @@ struct DCGANCritic <: Critic
     model
 end
 
+function DCGANCritic(model, useGPU::Bool)
+    if useGPU
+        return DCGANCritic(gpu(model))
+    else
+        return DCGANCritic(model)
+    end
+end
+
 struct MLPGenerator <: Generator
     model
+end
+
+function MLPGenerator(model, useGPU::Bool)
+    if useGPU
+        return DCGANCritic(gpu(model))
+    else
+        return DCGANCritic(model)
+    end
 end
 
 struct MLPCritic <: Critic
