@@ -61,7 +61,7 @@ function DCGANGenerator(;generatorInputSize = 10)
 
         # Third convolution, operating upon a 7x7 image
         ConvTranspose((3, 3), 16 => 1, σ),
-    )
+        x->reshape(x, 28, 28, :))
     return DCGANGenerator(model)
 end
 
