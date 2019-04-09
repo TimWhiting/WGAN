@@ -1,3 +1,5 @@
+using stats
+
 # These are the losses for the sNORB_mlp_dcgan model,
 # for epochs 1-76. Each entry is of the format:
 # ["criticLoss", "generatorloss"].
@@ -80,3 +82,14 @@ losses = [
     [0.0010, 0.0914],
     [0.0009, 0.0908]
 ]
+
+# Build object
+ganStats = GANStats()
+for lossEntry in losses
+    push!(ganStats.cLoss, lossEntry[1])
+    push!(ganStats.gLoss, lossEntry[2])
+end
+
+# Plot results
+
+plotGANStats(ganStats, "sNORB_mlp_dcgan_loss_1-76")
