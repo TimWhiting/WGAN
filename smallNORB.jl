@@ -68,8 +68,7 @@ function DCGANCritic(useGPU::Bool = false)
         # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
         # which is where we get the 288 in the `Dense` layer below:
         x->reshape(x, :, size(x, 4)),
-        x -> println("new size == $(size(x))"),
-        Dense(800, 1),
+        Dense(1024, 1),
     )
     return DCGANCritic(model, useGPU)
 end
