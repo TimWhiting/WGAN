@@ -52,24 +52,23 @@ end
 
 function DCGANCritic(useGPU::Bool = false)
     model = Chain(x->reshape(x, norbImgSize, norbImgSize, 1, :),
-        Conv((3, 3), 1 => 16, stride = 2),
-        BatchNorm(16, relu),
+        Conv((4, 4), 1 => 32, stride = 2, relu),
 
         # Second convolution, operating upon a 14x14 image
-        Conv((3, 3), 16 => 32, stride = 2),
+        Conv((4, 4), 32 => 32, stride = 2),
         BatchNorm(32, relu),
 
         # Third convolution, operating upon a 7x7 image
-        Conv((3, 3), 32 => 32, stride = 2),
-        BatchNorm(32, relu),
+        Conv((4, 4), 32 => 64, stride = 2),
+        BatchNorm(64, relu),
 
-        Conv((3, 3), 32 => 32, stride = 2),
-        BatchNorm(32, relu),
+        Conv((4, 4), 64 => 64, stride = 2),
+        BatchNorm(64, relu),
 
         # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
         # which is where we get the 288 in the `Dense` layer below:
         x->reshape(x, :, size(x, 4)),
-        Dense(800, 1),
+        Dense(1024, 1),
     )
     return DCGANCritic(model, useGPU)
 end
@@ -134,17 +133,23 @@ function trainsNORBMLPGeneratorDCGANCritic(; useGPU = false)
     @info("Loading data set")
     train_imgs = getsNORBImages()
 
-    batch_size = 32
+    batch_size = 64
     mb_idxs = partition(1:length(train_imgs), batch_size)
     train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
 
-    generatorInputSize = 50
+    generatorInputSize = 100
     @info("Constructing model...")
-    wgan = WGAN(DCGANCritic(useGPU), MLPGenerator(useGPU, generatorInputSize = generatorInputSize), generatorInputSize = generatorInputSize, batchSize = batch_size)
+    wgan = WGAN(
+        DCGANCritic(useGPU),
+        MLPGenerator(useGPU, generatorInputSize = generatorInputSize),
+        generatorInputSize = generatorInputSize,
+        batchSize = batch_size,
+        learningRate = 0.00005
+    )
     
     if (useGPU) train_set = gpu.(train_set) end
 
-    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan", numSamplesToSave = 40, imageSize = norbImgSize)
+    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan_v2", numSamplesToSave = 40, imageSize = norbImgSize)
 
 end
 #getsNORBImages()

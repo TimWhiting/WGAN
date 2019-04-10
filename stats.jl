@@ -14,6 +14,12 @@ mutable struct LearningStats
 end
 LearningStats() = LearningStats([], [], [], [], [], [], -Inf64, Inf64)
 
+mutable struct GANStats
+    cLoss::Array{Float64,1}
+    gLoss::Array{Float64,1}
+end
+GANStats() = GANStats([], [])
+
 function plotLearningStats(stats::LearningStats, name::String, isClassification::Bool)
     if isClassification
         plt = plot(1:length(stats.valLoss), hcat(stats.trainLoss, stats.valLoss, stats.valAcc), label = ["Train Loss", "Val. Loss", "Val. Accuracy"], xlabel = "Epochs", ylabel =  "Loss")
@@ -39,6 +45,11 @@ function plotCompareModels(stats::Array{LearningStats}, modelNames::Array{String
     savefig(plt, "$(plotName).png");
 end
 
-export LearningStats, plotLearningStats, plotCompareModels
+function plotGANStats(stats::GANStats, name::String)
+    plt = plot(1:length(stats.cLoss), hcat(stats.cLoss, stats.gLoss), label = ["Critic Loss", "Generator Loss"], xlabel = "Epochs", ylabel = "Loss")
+    savefig(plt, "$(name).png");
+end
+
+export LearningStats, GANStats, plotLearningStats, plotCompareModels, plotGANStats
 
 end # module stats
