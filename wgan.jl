@@ -261,7 +261,7 @@ function sweepLatentSpace(wgan::WGAN; modelName = "model", stepSize = .25, image
     
         for i = 1:wgan.n
             latentVector = randu((wgan.n, 1));
-            for j = 0:stepSize:1
+            for j = -1:stepSize:1
                 latentVector[i] = j;
                 save("$modelName/imageSweep/epoch_$(epoch_idx)/latentIndex_$(i)_value_$(j).png", colorview(Gray, reshape(wgan.generator.model(latentVector), imageSize, imageSize)))
             end

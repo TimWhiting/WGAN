@@ -179,7 +179,7 @@ function trainMNISTDCGAN()
     @info("Constructing model...")
     wgan = WGAN(DCGANCritic2(), DCGANGenerator2(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
    
-    trainWGAN(wgan, train_set, test_set; modelName = "mnist_mlp_dcgan", numSamplesToSave = 40)
+    trainWGAN(wgan, train_set, test_set; modelName = "mnist_dcgan_dcgan", numSamplesToSave = 40)
 
 end
 
@@ -189,12 +189,21 @@ function sweepMNISTMLPCriticDCGANCritic()
     generatorInputSize = 20
     batch_size = 1
     wgan = WGAN(DCGANCritic(), MLPGenerator2(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
-    sweepLatentSpace(wgan; modelName = "mnist_mlp_dcgan", stepSize = .25, imageSize = 28, epoch_idx = 100)
+    sweepLatentSpace(wgan; modelName = "mnist_mlp_dcgan", stepSize = .5, imageSize = 28, epoch_idx = 100)
+
+end
+
+function sweepDCGANDCGANCritic()
+    @info("Constructing model...")
+    generatorInputSize = 20
+    batch_size = 1
+    wgan = WGAN(DCGANCritic(), DCGANGenerator2(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+    sweepLatentSpace(wgan; modelName = "mnist_dcgan_dcgan", stepSize = .5, imageSize = 28, epoch_idx = 100)
 
 end
 #trainMNISTMLP()
 #trainMNISTDCGAN()
 #trainMNISTMLPCriticDCGANCritic()
 sweepMNISTMLPCriticDCGANCritic()
-
+#sweepDCGANDCGANCritic()
 end # module main
