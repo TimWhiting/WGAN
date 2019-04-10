@@ -257,18 +257,21 @@ function sweepLatentSpace(wgan::WGAN; modelName = "model", stepSize = .25, image
         BSON.@load "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator
         Flux.loadparams!(wgan.critic.model, weightsCritic)
         Flux.loadparams!(wgan.generator.model, weightsGenerator)
-    end
+        mkpath("$modelName/imageSweep/epoch_$(epoch_idx)/")
     
-    mkpath("$modelName/imageSweep/epoch_$(epoch_idx)/")
-    
-    for i = 1:wgan.n
-        latentVector = randu((wgan.n, 1));
-        for j = 0:stepSize:1
-            latentVector[i] = j;
-            save("$modelName/imageSweep/epoch_$(epoch_idx)/latentIndex_$(i)_value_$(j).png", colorview(Gray, reshape(wgan.generator.model(latentVector), imageSize, imageSize)))
+        for i = 1:wgan.n
+            latentVector = randu((wgan.n, 1));
+            for j = 0:stepSize:1
+                latentVector[i] = j;
+                save("$modelName/imageSweep/epoch_$(epoch_idx)/latentIndex_$(i)_value_$(j).png", colorview(Gray, reshape(wgan.generator.model(latentVector), imageSize, imageSize)))
+            end
         end
+        return
+    else
+        @info("Couldn't find your checkpoint...")
     end
-    return
+    
+  
 end
 
 end
