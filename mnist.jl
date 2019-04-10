@@ -3,7 +3,7 @@ using Flux.Data.MNIST, Statistics
 using Base.Iterators: repeated, partition
 using Flux
 
-using wgan: WGAN, trainWGAN, DCGANCritic, DCGANGenerator, MLPCritic, MLPGenerator
+using wgan: WGAN, trainWGAN, DCGANCritic, DCGANGenerator, MLPCritic, MLPGenerator, sweepLatentSpace
 
 # Bundle images together with labels and group into minibatchess
 
@@ -182,7 +182,19 @@ function trainMNISTDCGAN()
     trainWGAN(wgan, train_set, test_set; modelName = "mnist_mlp_dcgan", numSamplesToSave = 40)
 
 end
+
+
+function sweepMNISTMLPCriticDCGANCritic()
+    @info("Constructing model...")
+    generatorInputSize = 20
+    batch_size = 1
+    wgan = WGAN(DCGANCritic(), MLPGenerator2(generatorInputSize = generatorInputSize); generatorInputSize = generatorInputSize, batchSize = batch_size)
+    sweepLatentSpace(wgan; modelName = "mnist_mlp_dcgan", stepSize = .25, imageSize = 28, epoch_idx = 61)
+
+end
 #trainMNISTMLP()
 #trainMNISTMLPCriticDCGANCritic()
-trainMNISTDCGAN()
+sweepMNISTMLPCriticDCGANCritic()
+#trainMNISTDCGAN()
+
 end # module main
