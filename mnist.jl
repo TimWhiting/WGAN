@@ -183,6 +183,6 @@ function trainMNISTDCGAN()
 
 end
 #trainMNISTMLP()
-#trainMNISTMLPCriticDCGANCritic()
-trainMNISTDCGAN()
+trainMNISTMLPCriticDCGANCritic()
+#trainMNISTDCGAN()
 end # module main
