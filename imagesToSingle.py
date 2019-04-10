@@ -1,7 +1,7 @@
 import numpy as np
 import glob
 from PIL import Image
-initialPath = "./mnist_mlp_dcgan/images/"
+initialPath = "./mnist_dcgan_dcgan/images/"
 
 for k in range(1, 101):
     imageFolderPath = initialPath + "epoch_{}".format(k)
