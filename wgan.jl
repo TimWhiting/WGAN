@@ -11,15 +11,25 @@ using Statistics
 using Images
 using Dates: now
 using NNlib: relu, σ
+# using CuArrays
 import Flux.Tracker: Params, gradient, data, update!, tracker
 
 const ϵ = 1e-8
+
+const USE_GPU = false
 
 abstract type Generator end
 abstract type Critic end
 
 struct DCGANGenerator <: Generator
     model
+end
+function DCGANGenerator(model, useGPU::Bool)
+    if useGPU
+        return DCGANGenerator(gpu(model))
+    else
+        return DCGANGenerator(model)
+    end
 end
 
 struct DCGANCritic <: Critic
@@ -51,7 +61,11 @@ struct MLPCritic <: Critic
 end
 
 function randu(dims::Tuple{Vararg{Int64}})
-    return Float32.(rand(dims...) .* 2 .- 1.)
+    if USE_GPU
+        return gpu(Float32.(rand(dims...) .* 2 .- 1.))
+    else
+        return Float32.(rand(dims...) .* 2 .- 1.)
+    end
 end
 function randGaussian(dims::Tuple{Vararg{Int64}}, mean::Float32, stddev::Float32)::Array{Float32}
     return Float32.((randn(dims) .* stddev) .- (stddev / 2) .+ mean)
@@ -197,7 +211,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     mkpath("$modelName/images")
     mkpath("$modelName/checkpoints")
     @info("Beginning training loop...")
-    best_loss = 10000000000000000000000000000.0
+    best_loss = Inf64
     last_improvement = 0
 
     for epoch_idx in 1:epochs
@@ -209,8 +223,6 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
             BSON.@load "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator
             Flux.loadparams!(wgan.critic.model, weightsCritic)
             Flux.loadparams!(wgan.generator.model, weightsGenerator)
-            loss = 0
-            gLoss = 0
         else
             train!(generatorLoss, criticLoss, wgan, trainSet, optGenerator, optCritic; cb = wgan.callback)
             # Calculate loss:
@@ -219,32 +231,33 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
             weightsGenerator = Tracker.data.(Params(params(wgan.generator.model)))
             weightsCritic = Tracker.data.(Params(params(wgan.critic.model)))
             BSON.@save "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator 
-        end
         
-        push!(modelStats.valAcc, loss)
-        @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
-        mkpath("$modelName/images/epoch_$(epoch_idx)/")
-        for i = 1:numSamplesToSave
-            save("$modelName/images/epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(wgan.generator.model(randu((wgan.n, 1))), imageSize, imageSize)))
-        end
-        # If our loss is good enough, quit out.
-        if targetLoss >= loss
-            @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
-            break
-        end
+            push!(modelStats.valAcc, loss)
+            @info(@sprintf("[%d]: critic loss: %.4f generator loss: %.4f", epoch_idx, loss, gLoss))
+            mkpath("$modelName/images/epoch_$(epoch_idx)/")
+            for i = 1:numSamplesToSave
+                sample = wgan.generator.model(randu((wgan.n, 1))) |> cpu
+                save("$modelName/images/epoch_$(epoch_idx)/image_$i.png", colorview(Gray, reshape(sample, imageSize, imageSize)))
+            end
+            # If our loss is good enough, quit out.
+            if targetLoss >= loss
+                @info(" -> Early-exiting: We reached our target loss of $(targetLoss)")
+                break
+            end
 
-        
-        # If this is the best loss we've seen so far, save the model out
-        if best_loss >= loss
-            best_loss = loss
-            modelStats.bestValAcc = best_loss
-            last_improvement = epoch_idx
-        end
+            
+            # If this is the best loss we've seen so far, save the model out
+            if best_loss >= loss
+                best_loss = loss
+                modelStats.bestValAcc = best_loss
+                last_improvement = epoch_idx
+            end
 
-        #if epoch_idx - last_improvement >= patience
-        #    @warn(" -> We're calling this converged.")
-        #    break
-        #end
+            #if epoch_idx - last_improvement >= patience
+            #    @warn(" -> We're calling this converged.")
+            #    break
+            #end
+        end
     end
     return modelStats
 end
@@ -261,7 +274,7 @@ function sweepLatentSpace(wgan::WGAN; modelName = "model", stepSize = .25, image
     
         for i = 1:wgan.n
             latentVector = randu((wgan.n, 1));
-            for j = 0:stepSize:1
+            for j = -1:stepSize:1
                 latentVector[i] = j;
                 save("$modelName/imageSweep/epoch_$(epoch_idx)/latentIndex_$(i)_value_$(j).png", colorview(Gray, reshape(wgan.generator.model(latentVector), imageSize, imageSize)))
             end
