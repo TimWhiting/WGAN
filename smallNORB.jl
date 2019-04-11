@@ -40,7 +40,7 @@ function makeMinibatch(X, idxs)
 end
 
 
-    function make_minibatch_mlp(X, idxs)
+function make_minibatch_mlp(X, idxs)
     X_batch = Array{Float32}(undef, norbImgSize * norbImgSize, length(idxs))
     for i in 1:length(idxs)
         #print(X[idxs[i]])
@@ -51,7 +51,8 @@ end
 
 
 function DCGANCritic(useGPU::Bool = false)
-    model = Chain(x->reshape(x, norbImgSize, norbImgSize, 1, :),
+    model = Chain(
+        x->reshape(x, norbImgSize, norbImgSize, 1, :),
         Conv((4, 4), 1 => 32, stride = 2, relu),
 
         # Second convolution, operating upon a 14x14 image
@@ -73,23 +74,23 @@ function DCGANCritic(useGPU::Bool = false)
     return DCGANCritic(model, useGPU)
 end
 
-function DCGANGenerator(;generatorInputSize = 10)
-    model = Chain(Dense(generatorInputSize, 288),
-        x->reshape(x, 3, 3, 32, :),
-        ConvTranspose((3, 3), 32 => 32),
+function DCGANGenerator(useGPU::Bool = false; generatorInputSize = 10)
+    model = Chain(
+        Dense(generatorInputSize, 512),
+        x->reshape(x, 4, 4, 32, :),
+
+        ConvTranspose((4, 4), 32 => 32, relu, stride=2),
+
+        ConvTranspose((4, 4), 32 => 32, stride=2),
         BatchNorm(32, relu),
 
-        # Second convolution, operating upon a 14x14 image
-        ConvTranspose((3, 3), 32 => 16),
+        ConvTranspose((4, 4), 32 => 16, stride=2),
         BatchNorm(16, relu),
 
-        # Third convolution, operating upon a 7x7 image
-        ConvTranspose((3, 3), 16 => 1, σ),
+        ConvTranspose((6, 6), 16 => 1, σ, stride=2),
     )
-    return DCGANGenerator(model)
+    return DCGANGenerator(model, useGPU)
 end
-
-
 
 function MLPCritic()
     model = Chain(x->reshape(x, norbImgSize^2, :),
@@ -152,8 +153,34 @@ function trainsNORBMLPGeneratorDCGANCritic(; useGPU = false)
     trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan_v2", numSamplesToSave = 40, imageSize = norbImgSize)
 
 end
-#getsNORBImages()
+
+function trainsNORBDCGANGeneratorDCGANCritic(; useGPU = false)
+
+    # Load labels and images from Flux.Data.sNORB
+    @info("Loading data set")
+    train_imgs = getsNORBImages()
+
+    batch_size = 64
+    mb_idxs = partition(1:length(train_imgs), batch_size)
+    train_set = [make_minibatch_mlp(train_imgs, i) for i in mb_idxs]
+
+    generatorInputSize = 100
+    @info("Constructing model...")
+    wgan = WGAN(
+        DCGANCritic(useGPU),
+        DCGANGenerator(useGPU, generatorInputSize = generatorInputSize),
+        generatorInputSize = generatorInputSize,
+        batchSize = batch_size,
+        learningRate = 0.00005
+    )
+    
+    if (useGPU) train_set = gpu.(train_set) end
+
+    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_dcgan_dcgan", numSamplesToSave = 40, imageSize = norbImgSize)
+
+end
+
 #trainsNORBMLP()
 trainsNORBMLPGeneratorDCGANCritic()
-
+#trainsNORBDCGANGeneratorDCGANCritic(useGPU = true)
 end # module smallNORB
