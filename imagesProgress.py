@@ -1,7 +1,7 @@
 import numpy as np
 import glob
 from PIL import Image
-initialPath = "./mnist_dcgan_dcgan/images/"
+initialPath = "./mnist_mlp/images/"
 
 list_im = []
 for k in range(1, 101):
