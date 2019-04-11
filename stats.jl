@@ -29,9 +29,7 @@ function plotLearningStats(stats::LearningStats, name::String, isClassification:
     savefig(plt, "$(name).png");
 end
 
-function plotCompareModels(stats::Array{LearningStats}, modelNames::Array{String},
-    plotName::String = "model-comparison"
-)
+function plotCompareModelsTrainAndVal(stats::Array{LearningStats}, modelNames::Array{String}, plotName::String = "model-comparison")
     plottables, labels = [], []
     for stat in stats push!(plottables, stat.trainLoss, stat.valAcc) end
     for name in modelNames push!(labels, "$(name) Train Loss", "$(name) Val. Accuracy") end
@@ -43,6 +41,28 @@ function plotCompareModels(stats::Array{LearningStats}, modelNames::Array{String
         xlabel = "Epochs", ylabel =  "Loss/Accuracy"
     )
     savefig(plt, "$(plotName).png");
+end
+
+function plotCompareModelsTrain(stats::Array{LearningStats}, modelNames::Array{String}, plotName::String = "model-comparison")
+    plottables, labels = [], []
+    for stat in stats push!(plottables, stat.trainLoss) end
+    for name in modelNames push!(labels, "$(name) Train Loss") end
+
+    plt = plot(
+        1:length(stats[1].trainLoss),
+        hcat(plottables...),
+        label = labels, linecolor = [:blue :blue], linestyle = [:solid :dot],
+        xlabel = "Epochs", ylabel =  "Loss"
+    )
+    savefig(plt, "$(plotName).png");
+end
+
+function plotCompareModels(stats::Array{LearningStats}, modelNames::Array{String}, plotName::String = "model-comparison"; trainOnly = false)
+    if trainOnly
+        return plotCompareModelsTrain(stats, modelNames, plotName)
+    else
+        return plotCompareModelsTrainAndVal(stats, modelNames, plotName)
+    end
 end
 
 function plotGANStats(stats::GANStats, name::String)

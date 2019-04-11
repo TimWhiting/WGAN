@@ -56,30 +56,25 @@ end
   a(T.(x))
 
 """Helper function used by Convolution constructor(s)."""
-function makeConvMat(filter::Int, inCh::Int, outCh::Int, xWidth::Int, xHeight::Int, init::Function)
-    W = param(init(filter, filter, inCh, outCh))
+function makeConvMat(filter::Int, xWidth::Int, xHeight::Int, init::Function)
+    W = init(filter, filter)
     numColSteps = xWidth - filter + 1
     numRowSteps = xHeight - filter + 1
-    # We initialize convMat to be of type Any so it can hold both floats untracked
-    # by Flux's automatic differentiator AND the weights that are. Maybe this is
-    # part of the problem.
-    convMat = Array{Any}(undef, numColSteps*numRowSteps, xWidth*xHeight, inCh, outCh)
-    # fill with untracked zeros (we want those to stay as 0's throughout learning.)
-    convMat[:] = zeros(size(convMat)...)
+
+    convMat = zeros(Float32, numColSteps*numRowSteps, xWidth*xHeight)
     convMatⱼ = 0
-    for inChᵢ in 1:inCh, outChᵢ in 1:outCh
-        for convMatᵢ in 1:size(convMat)[1]
-            # Add a row to (convMat), the convolution transpose matrix
-            # which will contain the tracked weights (W) within it.
-            convMatⱼ = Int(floor((convMatᵢ-1) / numColSteps) * xWidth) + (convMatᵢ-1) % numRowSteps + 1
-            for Wᵢ in 1:filter
-                # Insert row Wᵢ of W into row convMatᵢ of convMat at the proper place.
-                convMat[convMatᵢ, convMatⱼ:(convMatⱼ+filter-1), inChᵢ, outChᵢ] = W[Wᵢ, :, inChᵢ, outChᵢ]
-                convMatⱼ += xWidth
-            end
+
+    for convMatᵢ in 1:size(convMat)[1]
+        # Add a row to (convMat), the convolution transpose matrix
+        # which will contain the tracked weights (W) within it.
+        convMatⱼ = Int(floor((convMatᵢ-1) / numColSteps) * xWidth) + (convMatᵢ-1) % numRowSteps + 1
+        for Wᵢ in 1:filter
+            # Insert row Wᵢ of W into row convMatᵢ of convMat at the proper place.
+            convMat[convMatᵢ, convMatⱼ:(convMatⱼ+filter-1)] = W[Wᵢ, :]
+            convMatⱼ += xWidth
         end
     end
-    return convMat
+    return param(convMat)
 end
 
 """A convolutional NN layer"""
@@ -88,17 +83,17 @@ struct Convolution{F,A,V}
     b::V
     σ::F
     filterDim::Int
-    inCh::Int
-    outCh::Int
+    xWidth::Int
+    xHeight::Int
 end
 
-function Convolution(filter::Int, inCh::Int, outCh::Int, σ = identity; init = glorot_uniform)
+function Convolution(filter::Int, xWidth::Int, xHeight::Int, σ = identity; init = glorot_uniform)
     # Weights will have dimensions (filter x filter x inCh x outCh)
     # i.e. there is a filter of weights for each input channel of each feature map.
     # Each feature map only has one bias weight.
-    W = param(init(filter, filter, inCh, outCh))
-    b = param(zeros(outCh))
-    return Convolution(W, b, σ, filter, inCh, outCh) 
+    W = makeConvMat(filter, xWidth, xHeight, init)
+    b = param(0.)
+    return Convolution(W, b, σ, filter, xWidth, xHeight) 
 end
 
 Flux.@treelike Convolution
@@ -108,25 +103,16 @@ Performs forward convolution on the input array `x`. `x` should be
 in the HWCN (height-width-channels-batchsize) format.
 """
 function (c::Convolution)(x::AbstractArray)
-    # Initialize the pre-activated feature map values
-    xDimRows, xDimCols, _, batchSize = size(x)
-    net = TrackedArray(zeros(Float32, xDimRows - c.filterDim + 1, xDimCols - c.filterDim + 1, c.outCh, batchSize))
-    # Compute the nets
-    numRowSteps, numColSteps = size(net)[1:2]
-    for batchᵢ in 1:batchSize, featMap in 1:c.outCh
-        # convolve over the input matrix to get
-        # this feature map
-        for netⱼ in 1:numColSteps, netᵢ in 1:numRowSteps
-            xRows = netᵢ:(netᵢ + c.filterDim - 1)
-            xCols = netⱼ:(netⱼ + c.filterDim - 1)
-            chProducts = sum(sum(x[xRows,xCols, channel, batchᵢ] .* c.W[:, :, channel, featMap]) for channel in 1:c.inCh)
-            net.data[netᵢ, netⱼ, featMap, batchᵢ] = chProducts
-        end
-        # Add the bias
-        net.data[:,:,featMap,batchᵢ] .+ c.b[featMap]
+    if size(x)[1] != c.xHeight
+        throw(ArgumentError("Incoming array `x` must have $(c.xHeight) rows, not $(size(x)[1])"))
+    elseif size(x)[2] != c.xWidth
+        throw(ArgumentError("Incoming array `x` must have $(c.xWidth) columns, not $(size(x)[2])"))
     end
-    # Activate
-    return c.σ.(net)
+
+    # flatten each channel into a vector
+    flatX = reshape(x, size(x)[1] * size(x)[2])
+    # Compute the net and activate
+    return reshape(c.σ.(c.W * flatX .+ c.b), c.xHeight - c.filterDim + 1, c.xWidth - c.filterDim + 1)
 end
 
 """A convolutional transpose NN layer"""
