@@ -1,0 +1,126 @@
+tim_a_whiting@machinelearning-cs678-1:~/WGAN$ julia main.jl
+[ Info: Loading data set
+[ Info: Downloading MNIST dataset
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   469  100   469    0     0    923      0 --:--:-- --:--:-- --:--:--   921
+100 9680k  100 9680k    0     0  12.8M      0 --:--:-- --:--:-- --:--:-- 12.8M
+[ Info: Downloading MNIST dataset
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   469  100   469    0     0  12025      0 --:--:-- --:--:-- --:--:-- 12025
+100 28881  100 28881    0     0   290k      0 --:--:-- --:--:-- --:--:--  290k
+[ Info: Downloading MNIST dataset
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   467  100   467    0     0  11390      0 --:--:-- --:--:-- --:--:-- 11390
+100 1610k  100 1610k    0     0   9.8M      0 --:--:-- --:--:-- --:--:-- 14.8M
+[ Info: Downloading MNIST dataset
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   467  100   467    0     0  11390      0 --:--:-- --:--:-- --:--:-- 11390
+100  4542  100  4542    0     0  43673      0 --:--:-- --:--:-- --:--:-- 43673
+[ Info: Constructing model...
+[ Info: Beginning training function...
+[ Info: Beginning training loop...
+[ Info: [1]: critic loss: 0.0413 generator loss: 0.0263
+[ Info: [2]: critic loss: 0.0253 generator loss: 0.0201
+[ Info: [3]: critic loss: 0.0191 generator loss: 0.0196
+[ Info: [4]: critic loss: 0.0192 generator loss: 0.0224
+[ Info: [5]: critic loss: 0.0180 generator loss: 0.0206
+[ Info: [6]: critic loss: 0.0150 generator loss: 0.0201
+[ Info: [7]: critic loss: 0.0122 generator loss: 0.0184
+[ Info: [8]: critic loss: 0.0097 generator loss: 0.0180
+[ Info: [9]: critic loss: 0.0084 generator loss: 0.0207
+[ Info: [10]: critic loss: 0.0070 generator loss: 0.0201
+[ Info: [11]: critic loss: 0.0058 generator loss: 0.0219
+[ Info: [12]: critic loss: 0.0049 generator loss: 0.0234
+[ Info: [13]: critic loss: 0.0040 generator loss: 0.0244
+[ Info: [14]: critic loss: 0.0036 generator loss: 0.0263
+[ Info: [15]: critic loss: 0.0036 generator loss: 0.0282
+[ Info: [16]: critic loss: 0.0030 generator loss: 0.0278
+[ Info: [17]: critic loss: 0.0029 generator loss: 0.0289
+[ Info: [18]: critic loss: 0.0031 generator loss: 0.0306
+[ Info: [19]: critic loss: 0.0028 generator loss: 0.0303
+[ Info: [20]: critic loss: 0.0025 generator loss: 0.0324
+[ Info: [21]: critic loss: 0.0023 generator loss: 0.0330
+[ Info: [22]: critic loss: 0.0023 generator loss: 0.0335
+[ Info: [23]: critic loss: 0.0020 generator loss: 0.0346
+[ Info: [24]: critic loss: 0.0022 generator loss: 0.0352
+[ Info: [25]: critic loss: 0.0017 generator loss: 0.0368
+[ Info: [26]: critic loss: 0.0016 generator loss: 0.0376
+[ Info: [27]: critic loss: 0.0016 generator loss: 0.0378
+[ Info: [28]: critic loss: 0.0016 generator loss: 0.0379
+[ Info: [29]: critic loss: 0.0013 generator loss: 0.0386
+[ Info: [30]: critic loss: 0.0014 generator loss: 0.0385
+[ Info: [31]: critic loss: 0.0013 generator loss: 0.0390
+[ Info: [32]: critic loss: 0.0015 generator loss: 0.0391
+[ Info: [33]: critic loss: 0.0012 generator loss: 0.0403
+[ Info: [34]: critic loss: 0.0014 generator loss: 0.0402
+[ Info: [35]: critic loss: 0.0013 generator loss: 0.0398
+[ Info: [36]: critic loss: 0.0011 generator loss: 0.0408
+[ Info: [37]: critic loss: 0.0012 generator loss: 0.0440
+[ Info: [38]: critic loss: 0.0011 generator loss: 0.0448
+[ Info: [39]: critic loss: 0.0009 generator loss: 0.0449
+[ Info: [40]: critic loss: 0.0011 generator loss: 0.0445
+[ Info: [41]: critic loss: 0.0011 generator loss: 0.0449
+[ Info: [42]: critic loss: 0.0009 generator loss: 0.0488
+[ Info: [43]: critic loss: 0.0008 generator loss: 0.0510
+[ Info: [44]: critic loss: 0.0007 generator loss: 0.0514
+[ Info: [45]: critic loss: 0.0010 generator loss: 0.0479
+[ Info: [46]: critic loss: 0.0010 generator loss: 0.0463
+[ Info: [47]: critic loss: 0.0008 generator loss: 0.0482
+[ Info: [48]: critic loss: 0.0011 generator loss: 0.0476
+[ Info: [49]: critic loss: 0.0009 generator loss: 0.0480
+[ Info: [50]: critic loss: 0.0010 generator loss: 0.0461
+[ Info: [51]: critic loss: 0.0010 generator loss: 0.0449
+[ Info: [52]: critic loss: 0.0008 generator loss: 0.0456
+[ Info: [53]: critic loss: 0.0010 generator loss: 0.0433
+[ Info: [54]: critic loss: 0.0010 generator loss: 0.0424
+[ Info: [55]: critic loss: 0.0011 generator loss: 0.0432
+[ Info: [56]: critic loss: 0.0010 generator loss: 0.0450
+[ Info: [57]: critic loss: 0.0011 generator loss: 0.0453
+[ Info: [58]: critic loss: 0.0010 generator loss: 0.0454
+[ Info: [59]: critic loss: 0.0010 generator loss: 0.0454
+[ Info: [60]: critic loss: 0.0009 generator loss: 0.0448
+[ Info: [61]: critic loss: 0.0009 generator loss: 0.0448
+[ Info: [62]: critic loss: 0.0009 generator loss: 0.0453
+[ Info: [63]: critic loss: 0.0009 generator loss: 0.0451
+[ Info: [64]: critic loss: 0.0009 generator loss: 0.0460
+[ Info: [65]: critic loss: 0.0007 generator loss: 0.0471
+[ Info: [66]: critic loss: 0.0007 generator loss: 0.0472
+[ Info: [67]: critic loss: 0.0008 generator loss: 0.0474
+[ Info: [68]: critic loss: 0.0008 generator loss: 0.0472
+[ Info: [69]: critic loss: 0.0007 generator loss: 0.0477
+[ Info: [70]: critic loss: 0.0007 generator loss: 0.0469
+[ Info: [71]: critic loss: 0.0006 generator loss: 0.0466
+[ Info: [72]: critic loss: 0.0008 generator loss: 0.0468
+[ Info: [73]: critic loss: 0.0009 generator loss: 0.0474
+[ Info: [74]: critic loss: 0.0006 generator loss: 0.0485
+[ Info: [75]: critic loss: 0.0006 generator loss: 0.0484
+[ Info: [76]: critic loss: 0.0005 generator loss: 0.0479
+[ Info: [77]: critic loss: 0.0005 generator loss: 0.0477
+[ Info: [78]: critic loss: 0.0007 generator loss: 0.0479
+[ Info: [79]: critic loss: 0.0008 generator loss: 0.0477
+[ Info: [80]: critic loss: 0.0005 generator loss: 0.0477
+[ Info: [81]: critic loss: 0.0006 generator loss: 0.0481
+[ Info: [82]: critic loss: 0.0005 generator loss: 0.0479
+[ Info: [83]: critic loss: 0.0008 generator loss: 0.0479
+[ Info: [84]: critic loss: 0.0006 generator loss: 0.0477
+[ Info: [85]: critic loss: 0.0006 generator loss: 0.0479
+[ Info: [86]: critic loss: 0.0006 generator loss: 0.0482
+[ Info: [87]: critic loss: 0.0005 generator loss: 0.0473
+[ Info: [88]: critic loss: 0.0006 generator loss: 0.0471
+[ Info: [89]: critic loss: 0.0005 generator loss: 0.0486
+[ Info: [90]: critic loss: 0.0005 generator loss: 0.0484
+[ Info: [91]: critic loss: 0.0006 generator loss: 0.0482
+[ Info: [92]: critic loss: 0.0006 generator loss: 0.0483
+[ Info: [93]: critic loss: 0.0006 generator loss: 0.0487
+[ Info: [94]: critic loss: 0.0006 generator loss: 0.0494
+[ Info: [95]: critic loss: 0.0006 generator loss: 0.0488
+[ Info: [96]: critic loss: 0.0005 generator loss: 0.0496
+[ Info: [97]: critic loss: 0.0005 generator loss: 0.0492
+[ Info: [98]: critic loss: 0.0005 generator loss: 0.0491
+[ Info: [99]: critic loss: 0.0005 generator loss: 0.0491
+[ Info: [100]: critic loss: 0.0005 generator loss: 0.0493
+tim_a_whiting@machinelearning-cs678-1:~/WGAN$
