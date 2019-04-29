@@ -150,7 +150,7 @@ function trainsNORBMLPGeneratorDCGANCritic(; useGPU = false)
     
     if (useGPU) train_set = gpu.(train_set) end
 
-    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan_v2", numSamplesToSave = 40, imageSize = norbImgSize)
+    trainWGAN(wgan, train_set, train_set; modelName = "sNORB_mlp_dcgan_v3", numSamplesToSave = 40, imageSize = norbImgSize, epochs = 600)
 
 end
 
