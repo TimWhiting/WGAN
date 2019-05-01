@@ -201,9 +201,10 @@ the real data.
 """
 criticLoss(c::Critic, g::Generator, X::AbstractArray, Z::AbstractArray{Float32,2}) = (mean(c.model(X)) - mean(c.model(g.model(Z))))
 
-function trainWGAN(wgan::WGAN, trainSet, valSet;
-    epochs = 100, targetLoss = -500, modelName = "model",
-    patience = 10, minLr = 1e-6, lrDropThreshold = 5, numSamplesToSave = 40,imageSize = 28)
+function trainWGAN(wgan::WGAN, trainSet, valSet; epochs = 100, targetLoss = -500,
+    modelName = "model", patience = 10, minLr = 1e-6, lrDropThreshold = 5,
+    numSamplesToSave = 40, imageSize = 28, startEpoch = 1
+)
     @info("Beginning training function...")
     modelStats = LearningStats()
     optCritic = RMSProp(wgan.α)
@@ -214,11 +215,7 @@ function trainWGAN(wgan::WGAN, trainSet, valSet;
     best_loss = Inf64
     last_improvement = 0
 
-    for epoch_idx in 1:epochs
-        # Train for a single epoch
-        #gpu(wgan.critic.model)
-        #gpu(wgan.generator.model)
-        #gpu.(trainSet)
+    for epoch_idx in startEpoch:epochs
         if isfile("$modelName/checkpoints/wgan-$epoch_idx.bson")
             BSON.@load "$modelName/checkpoints/wgan-$epoch_idx.bson" weightsCritic weightsGenerator
             Flux.loadparams!(wgan.critic.model, weightsCritic)
